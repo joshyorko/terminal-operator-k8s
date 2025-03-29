@@ -2,7 +2,7 @@
 
 ## Maintainer & Scope
 
-**THIS KUBE-BREW-OPERATOR IS MAINTAINED BY JOSHYORKO.**
+**THIS TERMINAL-OPERATOR IS MAINTAINED BY JOSHYORKO.**
 
 This project (`kube-brew-operator`) is an independent effort by **joshyorko** and is **NOT** officially affiliated with, endorsed by, or supported by **Terminal (terminal.shop)**.
 
