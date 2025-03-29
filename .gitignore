@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.nox/
+.eggs/
+*.egg-info/
+*.egg
+*.whl
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Kubernetes / Operator specific
+# Add any specific generated files, local configs, or secrets here
+# Example: kubeconfig files if stored locally and not meant for commit
+# kubeconfig
+# *.local.yaml
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+
+# Secrets - uncomment if you store secrets locally (not recommended)
+# secrets.yaml
+# *.key
+# *.pem

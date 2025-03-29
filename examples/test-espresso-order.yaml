@@ -1,0 +1,16 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeOrder
+metadata:
+  name: test-espresso-order
+  namespace: default
+spec:
+  productVariantId: "var_esp_dbl"  # APE USE EXAMPLE PRODUCT ID - REPLACE WITH REAL ONE!
+  quantity: 1
+  address:
+    name: "CODE GORILLA"
+    street1: "42 Binary Jungle"
+    city: "Silicon Forest"
+    state: "CA"
+    zip: "94107"
+    country: "US"
+  cardToken: "tok_visa"  # APE USE SANDBOX TEST TOKEN FROM STRIPE

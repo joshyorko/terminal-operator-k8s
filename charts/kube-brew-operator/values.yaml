@@ -1,0 +1,18 @@
+image:
+  repository: ghcr.io/joshyorko/terminal-operator-k8s
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# APE ENVIRONMENT CONFIG
+env:
+  TERMINAL_ENVIRONMENT: "dev"  # USE "production" WHEN APE READY FOR REAL COFFEE!
+
+# APE USE KUBE SECRET FOR TOKEN SECURITY!
+existingSecret: "terminal-api-secret"  # NAME OF SECRET WITH TOKEN
+secretTokenKey: "TERMINAL_BEARER_TOKEN"
+
+resources: {}
+
+serviceAccount:
+  create: true
+  name: ""

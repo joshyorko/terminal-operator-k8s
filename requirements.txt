@@ -1,0 +1,4 @@
+kopf
+terminal-shop
+python-dotenv
+kubernetes

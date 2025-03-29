@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kube-brew-operator.fullname" . }}
+  labels:
+    app: {{ include "kube-brew-operator.name" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "kube-brew-operator.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "kube-brew-operator.name" . }}
+    spec:
+      serviceAccountName: {{ include "kube-brew-operator.serviceAccountName" . }}
+      containers:
+        - name: kube-brew-operator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TERMINAL_ENVIRONMENT
+              value: "{{ .Values.env.TERMINAL_ENVIRONMENT }}"
+            - name: TERMINAL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: {{ .Values.secretTokenKey }}
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          command: ["kopf", "run", "/app/operator/main.py", "--verbose", "--standalone", "--liveness=http://0.0.0.0:8080/healthz"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

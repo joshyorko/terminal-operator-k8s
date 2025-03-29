@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kube-brew-operator.fullname" . }}
+rules:
+  # APE NEED PERMISSION TO SEE AND CHANGE COFFEE ORDERS!
+  - apiGroups: ["coffee.terminal.sh"]
+    resources: ["coffeeorders", "coffeeorders/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # APE NEED PERMISSION FOR OPERATOR TO WORK WITH EVENTS!
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kube-brew-operator.fullname" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kube-brew-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kube-brew-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
