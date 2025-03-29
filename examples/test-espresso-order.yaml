@@ -4,7 +4,7 @@ metadata:
   name: test-espresso-order
   namespace: default
 spec:
-  productVariantId: "var_esp_dbl"  # APE USE EXAMPLE PRODUCT ID - REPLACE WITH REAL ONE!
+  productVariantId: "var_esp_dbl"  # USE EXAMPLE PRODUCT ID - REPLACE WITH REAL ONE!
   quantity: 1
   address:
     name: "CODE GORILLA"
@@ -13,4 +13,4 @@ spec:
     state: "CA"
     zip: "94107"
     country: "US"
-  cardToken: "tok_visa"  # APE USE SANDBOX TEST TOKEN FROM STRIPE
+  cardToken: "tok_visa"  # USE SANDBOX TEST TOKEN FROM STRIPE

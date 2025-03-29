@@ -3,11 +3,11 @@ kind: ClusterRole
 metadata:
   name: {{ include "terminal-operator.fullname" . }}
 rules:
-  # APE NEED PERMISSION TO SEE AND CHANGE COFFEE ORDERS!
+  # NEED PERMISSION TO SEE AND CHANGE COFFEE ORDERS!
   - apiGroups: ["coffee.terminal.sh"]
     resources: ["coffeeorders", "coffeeorders/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
-  # APE NEED PERMISSION FOR OPERATOR TO WORK WITH EVENTS!
+  # NEED PERMISSION FOR OPERATOR TO WORK WITH EVENTS!
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch", "update"]

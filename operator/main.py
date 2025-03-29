@@ -10,7 +10,7 @@ load_dotenv()
 
 # Check for required environment variable
 if not os.environ.get("TERMINAL_BEARER_TOKEN"):
-    raise RuntimeError("APE ANGRY! NO TERMINAL_BEARER_TOKEN FOUND! APE NEED TOKEN!")
+    raise RuntimeError("ANGRY! NO TERMINAL_BEARER_TOKEN FOUND! NEED TOKEN!")
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +25,11 @@ terminal_client = Terminal(
 def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
     name = meta.get("name")
     generation = meta.get("generation")
-    logger.info(f"APE HANDLE ORDER {name} (gen: {generation})! APE HUNGRY FOR COFFEE!")
+    logger.info(f"HANDLE ORDER {name} (gen: {generation})! HUNGRY FOR COFFEE!")
 
     # If the order has already been created, do nothing (idempotency)
     if status.get("orderId"):
-        logger.info(f"APE ALREADY MAKE ORDER WITH ID {status['orderId']}! APE NO ORDER TWICE!")
+        logger.info(f"ALREADY MAKE ORDER WITH ID {status['orderId']}! NO ORDER TWICE!")
         return
 
     # Extract spec details with defaults
@@ -40,19 +40,19 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
 
     # Validate required fields
     if not product_variant_id:
-        msg = "APE ANGRY! NO productVariantId IN SPEC!"
+        msg = "ANGRY! NO productVariantId IN SPEC!"
         logger.error(msg)
         patch.status["phase"] = "Failed"
         patch.status["message"] = msg
         raise kopf.PermanentError(msg)
     if not address_spec:
-        msg = "APE CONFUSED! WHERE DELIVER COFFEE? NO address IN SPEC!"
+        msg = "CONFUSED! WHERE DELIVER COFFEE? NO address IN SPEC!"
         logger.error(msg)
         patch.status["phase"] = "Failed"
         patch.status["message"] = msg
         raise kopf.PermanentError(msg)
     if not card_token:
-        msg = "APE NEED PAY FOR COFFEE! NO cardToken IN SPEC!"
+        msg = "NEED PAY FOR COFFEE! NO cardToken IN SPEC!"
         logger.error(msg)
         patch.status["phase"] = "Failed"
         patch.status["message"] = msg
@@ -60,23 +60,23 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
 
     # Update initial status
     patch.status["phase"] = "Processing"
-    patch.status["message"] = "APE WORKING HARD TO GET COFFEE!"
+    patch.status["message"] = "WORKING HARD TO GET COFFEE!"
     patch.status["observedGeneration"] = generation
 
     try:
         # Update user profile (for demonstration; adjust parameters as needed)
         terminal_client.profile.update(name="MIGHTY KUBE GORILLA")
-        logger.info("APE UPDATE PROFILE! APE FAMOUS NOW!")
+        logger.info("UPDATE PROFILE! FAMOUS NOW!")
 
         # Create shipping address using provided spec
         address_response = terminal_client.address.create(**address_spec)
         address_id = address_response.data.id
-        logger.info(f"APE CREATE ADDRESS WITH ID: {address_id}! APE KNOW WHERE DELIVER!")
+        logger.info(f"CREATE ADDRESS WITH ID: {address_id}! KNOW WHERE DELIVER!")
 
         # Create card using the provided card token
         card_response = terminal_client.card.create(token=card_token)
         card_id = card_response.data.id
-        logger.info(f"APE CREATE CARD WITH ID: {card_id}! APE PAY FOR COFFEE!")
+        logger.info(f"CREATE CARD WITH ID: {card_id}! PAY FOR COFFEE!")
 
         # Direct order creation without cart
         order_response = terminal_client.order.create(
@@ -85,14 +85,14 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
             variants={product_variant_id: quantity}
         )
         order_id = order_response.data.id
-        logger.info(f"APE ORDER COFFEE! ORDER ID: {order_id}! APE SO HAPPY!")
+        logger.info(f"ORDER COFFEE! ORDER ID: {order_id}! SO HAPPY!")
 
         patch.status["phase"] = "Ordered"
         patch.status["orderId"] = order_id
-        patch.status["message"] = "APE ORDER SUCCESSFUL! COFFEE COMING SOON!"
+        patch.status["message"] = "ORDER SUCCESSFUL! COFFEE COMING SOON!"
 
     except Exception as e:
-        logger.error(f"APE SAD! ORDER FAIL: {e}")
+        logger.error(f"SAD! ORDER FAIL: {e}")
         patch.status["phase"] = "Failed"
         patch.status["message"] = f"ORDER ERROR: {e}"
-        raise kopf.TemporaryError(f"APE TRY AGAIN LATER! ERROR: {e}", delay=30)
+        raise kopf.TemporaryError(f"TRY AGAIN LATER! ERROR: {e}", delay=30)

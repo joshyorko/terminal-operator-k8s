@@ -1,12 +1,12 @@
 {{/*
-APE HELPER FUNCTIONS FOR MIGHTY HELM CHART!
+HELPER FUNCTIONS FOR MIGHTY HELM CHART!
 */}}
-{{/* APE GET CHART NAME */}}
+{{/* GET CHART NAME */}}
 {{- define "terminal-operator.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/* APE CREATE FULLNAME WITH RELEASE NAME */}}
+{{/* CREATE FULLNAME WITH RELEASE NAME */}}
 {{- define "terminal-operator.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
@@ -20,7 +20,7 @@ APE HELPER FUNCTIONS FOR MIGHTY HELM CHART!
 {{- end }}
 {{- end }}
 
-{{/* APE GET SERVICE ACCOUNT NAME */}}
+{{/* GET SERVICE ACCOUNT NAME */}}
 {{- define "terminal-operator.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
 {{- default (include "terminal-operator.fullname" .) .Values.serviceAccount.name }}
