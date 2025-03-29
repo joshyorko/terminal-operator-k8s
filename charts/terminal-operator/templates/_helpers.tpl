@@ -2,12 +2,12 @@
 APE HELPER FUNCTIONS FOR MIGHTY HELM CHART!
 */}}
 {{/* APE GET CHART NAME */}}
-{{- define "kube-brew-operator.name" -}}
+{{- define "terminal-operator.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/* APE CREATE FULLNAME WITH RELEASE NAME */}}
-{{- define "kube-brew-operator.fullname" -}}
+{{- define "terminal-operator.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -21,9 +21,9 @@ APE HELPER FUNCTIONS FOR MIGHTY HELM CHART!
 {{- end }}
 
 {{/* APE GET SERVICE ACCOUNT NAME */}}
-{{- define "kube-brew-operator.serviceAccountName" -}}
+{{- define "terminal-operator.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "kube-brew-operator.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "terminal-operator.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

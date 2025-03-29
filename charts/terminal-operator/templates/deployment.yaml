@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "kube-brew-operator.fullname" . }}
+  name: {{ include "terminal-operator.fullname" . }}
   labels:
-    app: {{ include "kube-brew-operator.name" . }}
+    app: {{ include "terminal-operator.name" . }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ include "kube-brew-operator.name" . }}
+      app: {{ include "terminal-operator.name" . }}
   template:
     metadata:
       labels:
-        app: {{ include "kube-brew-operator.name" . }}
+        app: {{ include "terminal-operator.name" . }}
     spec:
-      serviceAccountName: {{ include "kube-brew-operator.serviceAccountName" . }}
+      serviceAccountName: {{ include "terminal-operator.serviceAccountName" . }}
       containers:
-        - name: kube-brew-operator
+        - name: terminal-operator
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
