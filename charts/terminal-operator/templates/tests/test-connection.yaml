@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "terminal-operator.fullname" . }}-test-connection"
+  labels:
+    {{- include "terminal-operator.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: connection-test
+      image: busybox
+      command: ['sh', '-c', 'echo "Testing operator deployment..." && \
+        wget -q --timeout=5 http://{{ include "terminal-operator.fullname" . }}:8080/healthz -O- || exit 1']
+  restartPolicy: Never

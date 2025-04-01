@@ -4,3 +4,17 @@ description: A Helm chart for deploying the Terminal Operator which orders coffe
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
+annotations:
+  category: ApplicationDeployment
+  licenses: Apache-2.0
+  repository: https://github.com/joshyorko/terminal-operator-k8s
+  support: Community
+  helm.sh/resource-policy: delete-on-uninstall
+icon: https://avatars.githubusercontent.com/u/166243908?s=200&v=4
+maintainers:
+  - name: Josh Yorko
+    email: joshua.yorko@gmail.com
+keywords:
+  - terminal-shop
+  - coffee
+  - kubernetes-operator
