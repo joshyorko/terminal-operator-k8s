@@ -1,10 +1,12 @@
 import os
 import logging
 import asyncio
+from typing import Optional
 
 import kopf
 from dotenv import load_dotenv
 from terminal_shop import Terminal, APIStatusError
+from kubernetes import client, config
 
 # Load environment variables from .env file (set externally to .env.dev or .env.prod)
 load_dotenv()
@@ -41,59 +43,189 @@ def safe_get_list_data(response_data):
         return []
     return list(response_data) if hasattr(response_data, '__iter__') else []
 
+# --- Resource Reference Resolution ---
+def resolve_resource_reference(ref: dict, namespace: str, api: client.CustomObjectsApi, group: str, version: str, plural: str) -> Optional[dict]:
+    """Resolves a reference to another custom resource."""
+    try:
+        resource = api.get_namespaced_custom_object(
+            group=group,
+            version=version,
+            namespace=ref.get('namespace', namespace),
+            plural=plural,
+            name=ref['name']
+        )
+        return resource
+    except client.exceptions.ApiException as e:
+        if e.status == 404:
+            return None
+        raise
+
+# --- Address Handler ---
+@kopf.on.create('coffee.terminal.sh', 'v1alpha1', 'coffeeaddresses')
+@kopf.on.update('coffee.terminal.sh', 'v1alpha1', 'coffeeaddresses')
+def handle_address(spec, status, meta, patch, logger, **kwargs):
+    """Handles CoffeeAddress creation/updates."""
+    # Set initial phase if not set
+    if not status.get('phase'):
+        patch.status['phase'] = 'Pending'
+        patch.status['message'] = 'Address pending verification'
+        patch.status['observedGeneration'] = meta.get('generation')
+        logger.info(f"Address {meta['name']} initialized, waiting for verification")
+        return  # Return to allow status to be updated before proceeding
+
+    # Don't reprocess if already verified
+    if status.get('addressId') and status.get('phase') == 'Verified':
+        logger.info(f"Address {meta['name']} already verified with ID {status['addressId']}")
+        return
+
+    # Only proceed if we're in Pending phase
+    if status.get('phase') != 'Pending':
+        logger.info(f"Address {meta['name']} in {status.get('phase')} phase, skipping processing")
+        return
+
+    # Extract address details
+    address_payload = {
+        'name': spec['name'],
+        'street1': spec['street1'],
+        'street2': spec.get('street2'),
+        'city': spec['city'],
+        'zip': spec['zip'],
+        'country': spec['country']
+    }
+    
+    try:
+        logger.info(f"Creating/verifying address for {meta['name']}...")
+        address_response = terminal_client.address.create(**address_payload)
+        address_id = get_id_from_response(address_response.data)
+        
+        if not address_id:
+            patch.status['phase'] = 'Failed'
+            patch.status['message'] = 'Failed to get address ID from API response'
+            logger.error(f"Address {meta['name']} verification failed: No address ID in response")
+            raise kopf.TemporaryError("No address ID in response", delay=60)
+        
+        patch.status['addressId'] = address_id
+        patch.status['phase'] = 'Verified'
+        patch.status['message'] = 'Address verified successfully'
+        patch.status['observedGeneration'] = meta.get('generation')
+        
+        logger.info(f"Address {meta['name']} verified with ID {address_id}")
+    except Exception as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"Failed to verify address: {str(e)}"
+        logger.error(f"Address {meta['name']} verification failed: {e}")
+        raise kopf.TemporaryError(f"Address verification failed: {e}", delay=60)
+
+# --- Card Handler ---
+@kopf.on.create('coffee.terminal.sh', 'v1alpha1', 'coffeecards')
+@kopf.on.update('coffee.terminal.sh', 'v1alpha1', 'coffeecards')
+def handle_card(spec, status, meta, patch, logger, **kwargs):
+    """Handles CoffeeCard creation/updates."""
+    # Set initial phase if not set
+    if not status.get('phase'):
+        patch.status['phase'] = 'Pending'
+        patch.status['message'] = 'Card pending registration'
+        patch.status['observedGeneration'] = meta.get('generation')
+        logger.info(f"Card {meta['name']} initialized, waiting for registration")
+        return  # Return to allow status to be updated before proceeding
+
+    # Don't reprocess if already registered
+    if status.get('cardId') and status.get('phase') == 'Registered':
+        logger.info(f"Card {meta['name']} already registered with ID {status['cardId']}")
+        return
+
+    # Only proceed if we're in Pending phase
+    if status.get('phase') != 'Pending':
+        logger.info(f"Card {meta['name']} in {status.get('phase')} phase, skipping processing")
+        return
+
+    card_token = spec['cardToken']
+    
+    try:
+        logger.info(f"Registering card for {meta['name']}...")
+        try:
+            card_response = terminal_client.card.create(token=card_token)
+            card_id = get_id_from_response(card_response.data)
+        except APIStatusError as e:
+            if e.status_code == 400 and e.body and e.body.get("code") == "already_exists":
+                logger.info(f"Card token already exists. Finding existing card...")
+                cards_response = terminal_client.card.list()
+                card_list = safe_get_list_data(cards_response.data)
+                if card_list:
+                    card_id = card_list[0].id
+                else:
+                    raise Exception("No existing card found despite 'already_exists' error.")
+            else:
+                raise
+
+        if not card_id:
+            patch.status['phase'] = 'Failed'
+            patch.status['message'] = 'Failed to get card ID from API response'
+            logger.error(f"Card {meta['name']} registration failed: No card ID in response")
+            raise kopf.TemporaryError("No card ID in response", delay=60)
+
+        patch.status['cardId'] = card_id
+        patch.status['phase'] = 'Registered'
+        patch.status['message'] = 'Card registered successfully'
+        patch.status['observedGeneration'] = meta.get('generation')
+        
+        logger.info(f"Card {meta['name']} registered with ID {card_id}")
+    except Exception as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"Failed to register card: {str(e)}"
+        logger.error(f"Card {meta['name']} registration failed: {e}")
+        raise kopf.TemporaryError(f"Card registration failed: {e}", delay=60)
+
+@kopf.on.delete('coffee.terminal.sh', 'v1alpha1', 'coffeecards')
+def delete_card(spec, status, meta, logger, **kwargs):
+    """Handles CoffeeCard deletion."""
+    card_id = status.get('cardId')
+    if not card_id:
+        logger.info(f"No card ID found for {meta['name']}, nothing to delete")
+        return
+
+    try:
+        logger.info(f"Deleting card {card_id}...")
+        terminal_client.card.delete(card_id)
+        logger.info(f"Card {card_id} deleted successfully")
+    except Exception as e:
+        logger.error(f"Failed to delete card {card_id}: {e}")
+        # Don't raise an error here as the resource is being deleted anyway
+
 # --- Operator Handlers ---
 
 @kopf.on.create("coffee.terminal.sh", "v1alpha1", "coffeeorders")
 @kopf.on.update("coffee.terminal.sh", "v1alpha1", "coffeeorders")
 def handle_coffee_order_creation(spec, status, meta, patch, logger, **kwargs):
-    """Handles the creation or update of a CoffeeOrder, focusing on placing the order if not already done."""
+    """Handles the creation or update of a CoffeeOrder."""
     resource_name = meta.get("name")
     generation = meta.get("generation")
+    namespace = meta.get("namespace", "default")
     logger.info(f"[Create/Update: {resource_name}] Gen: {generation}. Checking if order needs placement.")
 
-    # Prevent re-processing if order already exists in status
+    # Prevent re-processing if order already exists
     if status.get("orderId") and status.get("phase") not in ["Failed", "Pending"]:
-        logger.info(f"[Create/Update: {resource_name}] Order ID {status['orderId']} already exists. Skipping creation.")
-        # If we want to handle spec *changes* (e.g., quantity update), logic would go here
-        # But API doesn't support order update, so we mostly just reconcile creation
-        # Ensure observedGeneration is updated if spec changed but order exists
+        logger.info(f"[Create/Update: {resource_name}] Order ID {status['orderId']} already exists.")
         if meta.get('generation') != status.get('observedGeneration'):
             patch.status['observedGeneration'] = meta.get('generation')
-            patch.status['message'] = "Spec updated, but order cannot be modified via API after creation."
+            patch.status['message'] = "Spec updated, but order cannot be modified after creation."
         return
 
-    # Extract spec details
-    product_variant_id = spec.get("productVariantId")
-    quantity = spec.get("quantity", 1)
-    address_spec = spec.get("address", {})
-    card_token = spec.get("cardToken")
-    profile_email = spec.get("email") # Renamed to avoid conflict
-
     # --- Field Validation ---
-    if not product_variant_id:
-        msg = "ANGRY! NO productVariantId IN SPEC!"
-        logger.error(f"[Create/Update: {resource_name}] {msg}")
-        patch.status["phase"] = "Failed"
-        patch.status["message"] = msg
-        raise kopf.PermanentError(msg)
-    if not address_spec:
-        msg = "CONFUSED! WHERE DELIVER COFFEE? NO address IN SPEC!"
-        logger.error(f"[Create/Update: {resource_name}] {msg}")
-        patch.status["phase"] = "Failed"
-        patch.status["message"] = msg
-        raise kopf.PermanentError(msg)
-    if not card_token:
-        msg = "NEED PAY FOR COFFEE! NO cardToken IN SPEC!"
-        logger.error(f"[Create/Update: {resource_name}] {msg}")
-        patch.status["phase"] = "Failed"
-        patch.status["message"] = msg
-        raise kopf.PermanentError(msg)
-    if not profile_email:
-        msg = "NEED EMAIL FOR ORDER! NO email IN SPEC!"
-        logger.error(f"[Create/Update: {resource_name}] {msg}")
-        patch.status["phase"] = "Failed"
-        patch.status["message"] = msg
-        raise kopf.PermanentError(msg)
+    required_fields = {
+        'productVariantId': spec.get('productVariantId'),
+        'profileRef': spec.get('profileRef'),
+        'addressRef': spec.get('addressRef'),
+        'cardRef': spec.get('cardRef')
+    }
+    
+    for field, value in required_fields.items():
+        if not value:
+            msg = f"ANGRY! NO {field} IN SPEC!"
+            logger.error(f"[Create/Update: {resource_name}] {msg}")
+            patch.status["phase"] = "Failed"
+            patch.status["message"] = msg
+            raise kopf.PermanentError(msg)
 
     # Update status before making API calls
     patch.status["phase"] = "Processing"
@@ -101,63 +233,74 @@ def handle_coffee_order_creation(spec, status, meta, patch, logger, **kwargs):
     patch.status["observedGeneration"] = generation
 
     try:
-        # 1. Update user profile
-        recipient_name = address_spec.get("name", "Kube Coffee Drinker")
-        logger.info(f"[Create/Update: {resource_name}] Updating profile for {recipient_name} ({profile_email})...")
-        terminal_client.profile.update(name=recipient_name, email=profile_email)
-        logger.info(f"[Create/Update: {resource_name}] Profile updated.")
+        # Initialize Kubernetes API client
+        api = client.CustomObjectsApi()
 
-        # 2. Create/Verify Address
-        address_payload = address_spec.copy()
-        address_payload.pop("state", None)
-        logger.info(f"[Create/Update: {resource_name}] Creating/verifying address...")
-        address_response = terminal_client.address.create(**address_payload)
-        address_id = get_id_from_response(address_response.data)
+        # 1. Resolve Profile reference
+        logger.info(f"[Create/Update: {resource_name}] Resolving profile reference...")
+        profile = resolve_resource_reference(
+            spec['profileRef'], namespace, api,
+            'coffee.terminal.sh', 'v1alpha1', 'coffeeprofiles'
+        )
+        if not profile:
+            raise kopf.TemporaryError(f"Profile {spec['profileRef']['name']} not found", delay=60)
+
+        # Update user profile with Terminal API
+        logger.info(f"[Create/Update: {resource_name}] Updating profile...")
+        terminal_client.profile.update(
+            name=profile['spec']['name'],
+            email=profile['spec']['email']
+        )
+
+        # 2. Resolve Address reference
+        logger.info(f"[Create/Update: {resource_name}] Resolving address reference...")
+        address = resolve_resource_reference(
+            spec['addressRef'], namespace, api,
+            'coffee.terminal.sh', 'v1alpha1', 'coffeeaddresses'
+        )
+        if not address:
+            raise kopf.TemporaryError(f"Address {spec['addressRef']['name']} not found", delay=60)
+        
+        address_id = address['status'].get('addressId')
         if not address_id:
-            raise ValueError("Failed to get Address ID from response.")
-        logger.info(f"[Create/Update: {resource_name}] Address ID: {address_id}")
+            raise kopf.TemporaryError(f"Address {spec['addressRef']['name']} not yet verified", delay=60)
 
-        # 3. Create/Verify Card
-        card_id = None
-        logger.info(f"[Create/Update: {resource_name}] Creating/verifying card...")
-        try:
-            card_response = terminal_client.card.create(token=card_token)
-            card_id = get_id_from_response(card_response.data)
-            if not card_id:
-                raise ValueError("Failed to get Card ID from create response.")
-            logger.info(f"[Create/Update: {resource_name}] Card created: {card_id}")
-        except APIStatusError as e:
-            if e.status_code == 400 and e.body and e.body.get("code") == "already_exists":
-                logger.info(f"[Create/Update: {resource_name}] Card token already exists. Finding existing card...")
-                cards_response = terminal_client.card.list()
-                card_list = safe_get_list_data(cards_response.data)
-                if card_list:
-                    card_id = card_list[0].id
-                    logger.info(f"[Create/Update: {resource_name}] Using existing card: {card_id}")
-                else:
-                    raise Exception("No existing card found despite 'already_exists' error.") from e
-            else:
-                raise
+        # 3. Resolve Card reference
+        logger.info(f"[Create/Update: {resource_name}] Resolving card reference...")
+        card = resolve_resource_reference(
+            spec['cardRef'], namespace, api,
+            'coffee.terminal.sh', 'v1alpha1', 'coffeecards'
+        )
+        if not card:
+            raise kopf.TemporaryError(f"Card {spec['cardRef']['name']} not found", delay=60)
+        
+        card_id = card['status'].get('cardId')
         if not card_id:
-            raise ValueError("Card ID could not be determined.")
+            raise kopf.TemporaryError(f"Card {spec['cardRef']['name']} not yet registered", delay=60)
 
         # 4. Create Order
         logger.info(f"[Create/Update: {resource_name}] Placing order...")
         order_response = terminal_client.order.create(
             address_id=address_id,
             card_id=card_id,
-            variants={product_variant_id: quantity}
+            variants={spec['productVariantId']: spec.get('quantity', 1)}
         )
         order_id = get_id_from_response(order_response.data)
         if not order_id:
             raise ValueError("Failed to get Order ID from response.")
+        
         logger.info(f"[Create/Update: {resource_name}] Order placed successfully! Order ID: {order_id}")
 
-        # Patch final success status
+        # Update status
         patch.status["phase"] = "Ordered"
         patch.status["orderId"] = order_id
         patch.status["message"] = "Order placed successfully via API."
+        patch.status["profileReadyStatus"] = True
+        patch.status["addressReadyStatus"] = True
+        patch.status["cardReadyStatus"] = True
 
+    except kopf.TemporaryError:
+        raise
     except Exception as e:
         logger.error(f"[Create/Update: {resource_name}] Order placement failed: {e}", exc_info=True)
         patch.status["phase"] = "Failed"

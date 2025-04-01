@@ -3,18 +3,15 @@ kind: ClusterRole
 metadata:
   name: {{ include "terminal-operator.fullname" . }}
 rules:
-  # NEED PERMISSION TO SEE AND CHANGE COFFEE ORDERS!
-  - apiGroups: ["coffee.terminal.sh"]
-    resources: ["coffeeorders", "coffeeorders/status"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
-  # NEED PERMISSION FOR OPERATOR TO WORK WITH EVENTS!
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["create", "patch", "update"]
-  # NEED PERMISSION TO LIST AND WATCH CRDs!
-  - apiGroups: ["apiextensions.k8s.io"]
-    resources: ["customresourcedefinitions"]
-    verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["list", "watch"]
+- apiGroups: ["coffee.terminal.sh"]
+  resources: ["coffeeorders", "coffeeprofiles", "coffeeaddresses", "coffeecards"]
+  verbs: ["list", "watch", "get", "patch"]
+- apiGroups: ["coffee.terminal.sh"]
+  resources: ["coffeeorders/status", "coffeeprofiles/status", "coffeeaddresses/status", "coffeecards/status"]
+  verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -25,6 +22,6 @@ roleRef:
   kind: ClusterRole
   name: {{ include "terminal-operator.fullname" . }}
 subjects:
-  - kind: ServiceAccount
-    name: {{ include "terminal-operator.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+- kind: ServiceAccount
+  name: {{ include "terminal-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

@@ -1,0 +1,80 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: coffeecards.coffee.terminal.sh
+spec:
+  group: coffee.terminal.sh
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: "Payment card specification for coffee orders."
+              required:
+                - cardToken
+              properties:
+                cardToken:
+                  type: string
+                  description: "Stripe card token (e.g., tok_visa) to use for payment."
+                description:
+                  type: string
+                  description: "Optional description or friendly name for the card."
+            status:
+              type: object
+              description: "Current status of the payment card."
+              properties:
+                cardId:
+                  type: string
+                  description: "The Terminal API card ID once registered."
+                phase:
+                  type: string
+                  description: "Current state of the card. Possible values:\n- Pending: Initial state\n- Registered: Card successfully registered\n- Failed: Card failed to register"
+                  enum:
+                    - Pending
+                    - Registered
+                    - Failed
+                message:
+                  type: string
+                  description: "Detailed status message or error info."
+                observedGeneration:
+                  type: integer
+                  description: "The most recent generation observed by the controller."
+                lastUsed:
+                  type: string
+                  format: "date-time"
+                  description: "Timestamp of the last time this card was used for an order."
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          description: Current phase of the card
+          jsonPath: .status.phase
+        - name: CardID
+          type: string
+          description: Terminal API Card ID
+          jsonPath: .status.cardId
+        - name: Description
+          type: string
+          description: Card description
+          jsonPath: .spec.description
+        - name: Message
+          type: string
+          description: Status message
+          jsonPath: .status.message
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+  scope: Namespaced
+  names:
+    plural: coffeecards
+    singular: coffeecard
+    kind: CoffeeCard
+    shortNames:
+      - ccard
+      - cc

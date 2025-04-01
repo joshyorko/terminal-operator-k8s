@@ -37,6 +37,6 @@ spec:
               port: health
             initialDelaySeconds: 30
             periodSeconds: 10
-          command: ["kopf", "run", "/app/terminal_operator/main.py", "--verbose", "--standalone", "--liveness=http://0.0.0.0:8080/healthz"]
+          command: ["kopf", "run", "/app/terminal_operator/main.py", "--verbose", "--namespace", "{{ .Release.Namespace }}", "--liveness=http://0.0.0.0:8080/healthz"]
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

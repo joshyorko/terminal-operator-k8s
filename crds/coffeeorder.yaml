@@ -17,8 +17,9 @@ spec:
               description: "Specification for the desired coffee order."
               required:
                 - productVariantId
-                - address
-                - email
+                - profileRef
+                - addressRef
+                - cardRef
               properties:
                 productVariantId:
                   type: string
@@ -28,42 +29,63 @@ spec:
                   description: "Number of items to order."
                   default: 1
                   minimum: 1
-                email:
-                  type: string
-                  description: "Customer email address for order notifications."
-                address:
+                profileRef:
                   type: object
-                  description: "Shipping address details for this order."
+                  description: "Reference to a CoffeeProfile resource."
                   required:
                     - name
-                    - street1
-                    - city
-                    - zip
-                    - country
                   properties:
                     name:
                       type: string
-                      description: "Recipient name."
-                    street1:
+                      description: "Name of the CoffeeProfile resource."
+                    namespace:
                       type: string
-                      description: "Street address line 1."
-                    street2:
+                      description: "Namespace of the CoffeeProfile resource. Defaults to the same namespace as this resource if not specified."
+                addressRef:
+                  type: object
+                  description: "Reference to a CoffeeAddress resource."
+                  required:
+                    - name
+                  properties:
+                    name:
                       type: string
-                      description: "Street address line 2 (optional)."
-                    city:
+                      description: "Name of the CoffeeAddress resource."
+                    namespace:
                       type: string
-                    state:
+                      description: "Namespace of the CoffeeAddress resource. Defaults to the same namespace as this resource if not specified."
+                cardRef:
+                  type: object
+                  description: "Reference to a CoffeeCard resource."
+                  required:
+                    - name
+                  properties:
+                    name:
                       type: string
-                      description: "State or province (optional, not used by Terminal API)."
-                    zip:
+                      description: "Name of the CoffeeCard resource."
+                    namespace:
                       type: string
-                      description: "Postal code."
-                    country:
-                      type: string
-                      description: "Two-letter country code (e.g., US)."
-                cardToken:
+                      description: "Namespace of the CoffeeCard resource. Defaults to the same namespace as this resource if not specified."
+                priority:
                   type: string
-                  description: "Stripe card token (e.g., tok_...) to use for payment."
+                  description: "Order priority level. Premium incurs higher costs but faster processing."
+                  enum:
+                    - Standard
+                    - Premium
+                  default: "Standard"
+                notes:
+                  type: string
+                  description: "Special instructions for the order (optional)."
+                scheduling:
+                  type: object
+                  description: "Optional scheduling parameters for the order."
+                  properties:
+                    deliveryWindow:
+                      type: string
+                      description: "Preferred delivery window (morning/afternoon)."
+                      enum: 
+                        - morning
+                        - afternoon
+                      default: "morning"
             status:
               type: object
               description: "Current status of the coffee order process."
@@ -85,9 +107,22 @@ spec:
                 orderId:
                   type: string
                   description: "The Terminal API order ID once created."
+                profileReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced profile is ready (true) or not (false)."
+                addressReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced address is ready (true) or not (false)."
+                cardReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced card is ready (true) or not (false)."
                 observedGeneration:
                   type: integer
                   description: "The most recent generation observed by the controller."
+                lastStatusCheck:
+                  type: string
+                  format: "date-time"
+                  description: "Timestamp of the last status check with the Terminal API."
       subresources:
         status: {}
       additionalPrinterColumns:
@@ -99,6 +134,14 @@ spec:
           type: string
           description: Terminal API Order ID
           jsonPath: .status.orderId
+        - name: Address
+          type: string
+          description: Address reference
+          jsonPath: .spec.addressRef.name
+        - name: Card
+          type: string
+          description: Payment card reference
+          jsonPath: .spec.cardRef.name
         - name: Message
           type: string
           description: Status message
