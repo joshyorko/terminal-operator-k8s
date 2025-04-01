@@ -155,6 +155,38 @@ Instructions for running the operator locally using tools like `kopf run` could 
 
 ---
 
+## Examples
+
+The `examples/` directory contains sample Custom Resource definitions for ordering different coffee varieties through the Terminal API.
+
+> **Note:** The 'cron' coffee product (`var_01JD0E87SB7K9MB5KGFPVJ1N7A`) requires a subscription and is intentionally excluded from the example orders. Subscription handling will be implemented in a future update.
+
+### Prerequisites
+
+- A Kubernetes cluster (e.g., Minikube, Kind, GKE, EKS, AKS)
+- `kubectl` configured to interact with your cluster
+- Helm v3+
+
+### Step 1: Install the Custom Resource Definition (CRD)
+
+Apply the CRD definition to your cluster:
+```bash
+kubectl apply -f crds/coffeeorder.yaml
+```
+
+### Step 2: Deploy the Operator using Helm
+
+Use the provided Helm chart to deploy the operator:
+```bash
+helm install kube-brew charts/terminal-operator-k8s \
+  --set image.repository=ghcr.io/joshyorko/terminal-operator-k8s \
+  --set image.tag=latest \ # Specify the desired image tag
+  --set env.TERMINAL_ENVIRONMENT="dev"  # Use "production" for real orders
+  # Ensure the secret 'terminal-api-secret' containing the token exists (see Configuration)
+```
+
+---
+
 ## Contributing
 
 Coming soon! Contributions are welcome. Please open issues or pull requests for any enhancements, bug fixes, or suggestions.
