@@ -292,16 +292,28 @@ def handle_coffee_order_creation(spec, status, meta, patch, logger, **kwargs):
             patch.status["addressReadyStatus"] = False
             raise kopf.TemporaryError(msg, delay=60)
         
-        address_id = address['status'].get('addressId')
-        if not address_id:
-            msg = f"Address '{spec['addressRef']['name']}' exists but is not yet verified"
-            logger.error(f"[Create/Update: {resource_name}] {msg}")
-            patch.status["phase"] = "Pending"
+        # Safely get status and check required fields/phase
+        address_status = address.get('status', {})  # Get status dict or empty dict if 'status' key missing
+        address_id = address_status.get('addressId')
+        address_phase = address_status.get('phase')
+
+        if not address_id or address_phase != 'Verified':
+            # Provide a more specific message based on why it's not ready
+            if not address.get('status'):
+                msg = f"Address '{spec['addressRef']['name']}' exists but its status is not yet available."
+            elif address_phase != 'Verified':
+                msg = f"Address '{spec['addressRef']['name']}' status is '{address_phase}', waiting for 'Verified'."
+            else:  # Should not happen if phase is Verified but ID missing, but handle defensively
+                msg = f"Address '{spec['addressRef']['name']}' is verified but addressId is missing in status."
+
+            logger.warning(f"[Create/Update: {resource_name}] Dependency not ready: {msg}")
+            patch.status["phase"] = "Pending"  # Keep order pending while waiting
             patch.status["message"] = msg
             patch.status["addressReadyStatus"] = False
-            raise kopf.TemporaryError(msg, delay=60)
-
+            raise kopf.TemporaryError(msg, delay=15)  # Retry sooner for dependencies
+        
         patch.status["addressReadyStatus"] = True
+        logger.info(f"[Create/Update: {resource_name}] Address dependency satisfied (ID: {address_id}).")
 
         # 3. Resolve Card reference
         logger.info(f"[Create/Update: {resource_name}] Resolving card reference...")
@@ -317,16 +329,32 @@ def handle_coffee_order_creation(spec, status, meta, patch, logger, **kwargs):
             patch.status["cardReadyStatus"] = False
             raise kopf.TemporaryError(msg, delay=60)
         
-        card_id = card['status'].get('cardId')
-        if not card_id:
-            msg = f"Card '{spec['cardRef']['name']}' exists but is not yet registered"
-            logger.error(f"[Create/Update: {resource_name}] {msg}")
-            patch.status["phase"] = "Pending"
+        # Safely get status and check required fields/phase
+        card_status = card.get('status', {})  # Get status dict or empty dict if 'status' key missing
+        card_id = card_status.get('cardId')
+        card_phase = card_status.get('phase')
+
+        if not card_id or card_phase != 'Registered':
+            if not card.get('status'):
+                msg = f"Card '{spec['cardRef']['name']}' exists but its status is not yet available."
+            elif card_phase != 'Registered':
+                msg = f"Card '{spec['cardRef']['name']}' status is '{card_phase}', waiting for 'Registered'."
+            else:  # Defensive
+                msg = f"Card '{spec['cardRef']['name']}' is registered but cardId is missing in status."
+
+            logger.warning(f"[Create/Update: {resource_name}] Dependency not ready: {msg}")
+            patch.status["phase"] = "Pending"  # Keep order pending
             patch.status["message"] = msg
             patch.status["cardReadyStatus"] = False
-            raise kopf.TemporaryError(msg, delay=60)
+            raise kopf.TemporaryError(msg, delay=15)  # Retry sooner for dependencies
 
         patch.status["cardReadyStatus"] = True
+        logger.info(f"[Create/Update: {resource_name}] Card dependency satisfied (ID: {card_id}).")
+
+        # If we reached here, dependencies are met. Set status before final API call.
+        patch.status["phase"] = "Processing"
+        patch.status["message"] = "Dependencies resolved. Placing order with Terminal API..."
+
 
         # 4. Create Order
         logger.info(f"[Create/Update: {resource_name}] All references resolved. Placing order...")
