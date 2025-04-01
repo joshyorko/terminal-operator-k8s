@@ -44,7 +44,8 @@ def get_id_from_response(response_data):
     elif hasattr(response_data, 'id'):
         return response_data.id
     else:
-        raise ValueError(f"Could not extract ID from response data: {response_data}")
+        print(f"⚠️ Warning: Could not extract ID from response data: {response_data}")
+        return None
 
 def safe_get_list_data(response_data):
     """Safely gets list data, handling None or non-iterable."""

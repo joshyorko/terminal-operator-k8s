@@ -16,8 +16,8 @@ ENVIRONMENT = os.environ.get("TERMINAL_ENVIRONMENT", "dev")
 if not BEARER_TOKEN:
     raise RuntimeError("ANGRY! NO TERMINAL_BEARER_TOKEN FOUND! NEED TOKEN!")
 
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 terminal_client = Terminal(
     bearer_token=BEARER_TOKEN,
