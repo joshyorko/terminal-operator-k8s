@@ -54,7 +54,7 @@ spec:
                       type: string
                     state:
                       type: string
-                      description: "State or province (optional)."
+                      description: "State or province (optional, not used by Terminal API)."
                     zip:
                       type: string
                       description: "Postal code."
@@ -70,7 +70,15 @@ spec:
               properties:
                 phase:
                   type: string
-                  description: "Lifecycle phase (e.g., Pending, Processing, Ordered, Failed)."
+                  description: "Current state of the order. Possible values:\n- Pending: Initial state\n- Processing: Order is being created\n- Ordered: Order successfully placed\n- Shipped: Order has been shipped\n- Delivered: Order has been delivered\n- Cancelled: Order was cancelled\n- Failed: Order failed to process"
+                  enum:
+                    - Pending
+                    - Processing
+                    - Ordered
+                    - Shipped
+                    - Delivered
+                    - Cancelled
+                    - Failed
                 message:
                   type: string
                   description: "Detailed status message or error info."
@@ -82,6 +90,22 @@ spec:
                   description: "The most recent generation observed by the controller."
       subresources:
         status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          description: Current phase of the order
+          jsonPath: .status.phase
+        - name: OrderID
+          type: string
+          description: Terminal API Order ID
+          jsonPath: .status.orderId
+        - name: Message
+          type: string
+          description: Status message
+          jsonPath: .status.message
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
   scope: Namespaced
   names:
     plural: coffeeorders
