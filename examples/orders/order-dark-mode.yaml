@@ -1,0 +1,14 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeOrder
+metadata:
+  name: order-dark-mode-test
+  namespace: terminal-shop-dev
+spec:
+  profileRef:
+    name: default-profile
+  addressRef:
+    name: default-address
+  cardRef:
+    name: default-card
+  productVariantId: var_01J1JFF4D5PBGT0W2RJ7FREHRR
+  quantity: 1

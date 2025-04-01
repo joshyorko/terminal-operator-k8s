@@ -1,0 +1,168 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: coffeeorders.coffee.terminal.sh
+spec:
+  group: coffee.terminal.sh
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: "Specification for the desired coffee order."
+              required:
+                - productVariantId
+                - profileRef
+                - addressRef
+                - cardRef
+              properties:
+                productVariantId:
+                  type: string
+                  description: "The specific product variant ID to order (e.g., var_...)."
+                quantity:
+                  type: integer
+                  description: "Number of items to order."
+                  default: 1
+                  minimum: 1
+                profileRef:
+                  type: object
+                  description: "Reference to a CoffeeProfile resource."
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeProfile resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeProfile resource. Defaults to the same namespace as this resource if not specified."
+                addressRef:
+                  type: object
+                  description: "Reference to a CoffeeAddress resource."
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeAddress resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeAddress resource. Defaults to the same namespace as this resource if not specified."
+                cardRef:
+                  type: object
+                  description: "Reference to a CoffeeCard resource."
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeCard resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeCard resource. Defaults to the same namespace as this resource if not specified."
+                priority:
+                  type: string
+                  description: "Order priority level. Premium incurs higher costs but faster processing."
+                  enum:
+                    - Standard
+                    - Premium
+                  default: "Standard"
+                notes:
+                  type: string
+                  description: "Special instructions for the order (optional)."
+                scheduling:
+                  type: object
+                  description: "Optional scheduling parameters for the order."
+                  properties:
+                    deliveryWindow:
+                      type: string
+                      description: "Preferred delivery window (morning/afternoon)."
+                      enum: 
+                        - morning
+                        - afternoon
+                      default: "morning"
+            status:
+              type: object
+              description: "Current status of the coffee order process. Note: The 'Delivered' state requires external carrier tracking and is not automatically set by this operator."
+              properties:
+                phase:
+                  type: string
+                  description: "Current state of the order. Status transitions:\n- Pending: Initial state when order is being validated\n- Processing: Dependencies are being checked and order is being created\n- Ordered: Order successfully placed with Terminal API\n- Shipped: Tracking number received, order has been shipped\n- Failed: Order failed to process\n- Cancelled: Order was cancelled\n- Delivered: (Note: This state requires external carrier tracking and is not set automatically)"
+                  enum:
+                    - Pending
+                    - Processing
+                    - Ordered
+                    - Shipped
+                    - Delivered
+                    - Cancelled
+                    - Failed
+                message:
+                  type: string
+                  description: "Detailed status message or error info."
+                orderId:
+                  type: string
+                  description: "The Terminal API order ID once created."
+                trackingNumber:
+                  type: string
+                  description: "Carrier tracking number when available."
+                trackingUrl:
+                  type: string
+                  description: "URL to track the shipment directly with carrier when available."
+                trackingService:
+                  type: string
+                  description: "Shipping carrier service (e.g., USPS, FedEx) when available."
+                profileReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced profile is ready (true) or not (false)."
+                addressReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced address is ready (true) or not (false)."
+                cardReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced card is ready (true) or not (false)."
+                observedGeneration:
+                  type: integer
+                  description: "The most recent generation observed by the controller."
+                lastStatusCheck:
+                  type: string
+                  format: "date-time"
+                  description: "Timestamp of the last status check with the Terminal API."
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          description: Current phase of the order
+          jsonPath: .status.phase
+        - name: OrderID
+          type: string
+          description: Terminal API Order ID
+          jsonPath: .status.orderId
+        - name: Address
+          type: string
+          description: Address reference
+          jsonPath: .spec.addressRef.name
+        - name: Card
+          type: string
+          description: Payment card reference
+          jsonPath: .spec.cardRef.name
+        - name: Message
+          type: string
+          description: Status message
+          jsonPath: .status.message
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+  scope: Namespaced
+  names:
+    plural: coffeeorders
+    singular: coffeeorder
+    kind: CoffeeOrder
+    shortNames:
+      - corder
+      - co

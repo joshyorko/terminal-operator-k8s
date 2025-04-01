@@ -1,0 +1,40 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }} and has been deployed to namespace {{ .Release.Namespace }}.
+
+Current configuration:
+--------------------
+Environment: {{ .Values.env.TERMINAL_ENVIRONMENT }}
+Image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+Service Account: {{ include "terminal-operator.serviceAccountName" . }}
+
+To verify the operator deployment:
+--------------------------------
+  kubectl get pods -n {{ .Release.Namespace }} -l "app={{ include "terminal-operator.name" . }}"
+
+To check the operator logs:
+-------------------------
+  kubectl logs -n {{ .Release.Namespace }} -l "app={{ include "terminal-operator.name" . }}" -f
+
+Available Custom Resources:
+------------------------
+1. CoffeeProfile (shortname: cprofile, cp)
+2. CoffeeAddress (shortname: caddress, ca)
+3. CoffeeCard (shortname: ccard, cc)
+4. CoffeeOrder (shortname: corder, co)
+
+Example commands to get started:
+-----------------------------
+# List all coffee orders
+  kubectl get coffeeorders -n {{ .Release.Namespace }}
+
+# Watch operator events
+  kubectl get events -n {{ .Release.Namespace }} --field-selector involvedObject.name={{ include "terminal-operator.fullname" . }} -w
+
+Status:
+------
+Watch the deployment status:
+  kubectl rollout status deployment/{{ include "terminal-operator.fullname" . }} -n {{ .Release.Namespace }}
+
+For more information and examples, check the documentation at:
+https://github.com/joshyorko/terminal-operator-k8s

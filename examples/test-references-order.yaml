@@ -1,0 +1,44 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeProfile
+metadata:
+  name: test-profile
+  namespace: terminal-shop-dev
+spec:
+  name: "CODE GORILLA"
+  email: "joshua.yorko@gmail.com"
+---
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeAddress
+metadata:
+  name: test-address
+  namespace: terminal-shop-dev
+spec:
+  name: "CODE GORILLA"
+  street1: "42 Binary Jungle"
+  city: "Silicon Forest"
+  zip: "94107"
+  country: "US"
+---
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeCard
+metadata:
+  name: test-card
+  namespace: terminal-shop-dev
+spec:
+  cardToken: "tok_visa"  # Use sandbox test token from Stripe
+  description: "Test Visa Card"
+---
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeOrder
+metadata:
+  name: test-reference-order
+  namespace: terminal-shop-dev
+spec:
+  productVariantId: "var_01JNH7GTF9FBA62Y0RT0WMK3BT"  # Flow coffee - 12oz light roast
+  quantity: 1
+  profileRef:
+    name: test-profile
+  addressRef:
+    name: test-address
+  cardRef:
+    name: test-card

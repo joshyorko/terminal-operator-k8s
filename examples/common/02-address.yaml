@@ -1,0 +1,12 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeAddress
+metadata:
+  name: default-address
+  namespace: terminal-shop-dev
+spec:
+  name: Default Test User
+  street1: 42 Binary Jungle
+  city: Silicon Forest
+  state: CA
+  zip: "94107"
+  country: US

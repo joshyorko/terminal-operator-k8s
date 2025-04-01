@@ -20,6 +20,20 @@ HELPER FUNCTIONS FOR MIGHTY HELM CHART!
 {{- end }}
 {{- end }}
 
+{{/* Common labels */}}
+{{- define "terminal-operator.labels" -}}
+helm.sh/chart: {{ include "terminal-operator.name" . }}-{{ .Chart.Version | replace "+" "_" }}
+{{ include "terminal-operator.selectorLabels" . }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/* Selector labels */}}
+{{- define "terminal-operator.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "terminal-operator.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
 {{/* GET SERVICE ACCOUNT NAME */}}
 {{- define "terminal-operator.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}

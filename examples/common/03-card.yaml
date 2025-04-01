@@ -1,0 +1,8 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeCard
+metadata:
+  name: default-card
+  namespace: terminal-shop-dev
+spec:
+  cardToken: tok_visa
+  description: Default Test Visa Card
