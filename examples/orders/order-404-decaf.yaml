@@ -1,0 +1,14 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeOrder
+metadata:
+  name: order-404-decaf-test
+  namespace: terminal-shop-dev
+spec:
+  profileRef:
+    name: default-profile
+  addressRef:
+    name: default-address
+  cardRef:
+    name: default-card
+  productVariantId: var_01J1JFEP8WXK5MKXNBTR2FJ1YC
+  quantity: 1

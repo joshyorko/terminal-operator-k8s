@@ -1,0 +1,14 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeOrder
+metadata:
+  name: order-artisan-test
+  namespace: terminal-shop-dev
+spec:
+  profileRef:
+    name: default-profile
+  addressRef:
+    name: default-address
+  cardRef:
+    name: default-card
+  productVariantId: var_01J5RJYPPNQMBANJ8XKPF4GV00
+  quantity: 1

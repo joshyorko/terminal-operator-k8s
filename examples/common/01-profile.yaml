@@ -1,0 +1,8 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeProfile
+metadata:
+  name: default-profile
+  namespace: terminal-shop-dev
+spec:
+  email: joshua.yorko@gmail.com
+  name: Default Test User
