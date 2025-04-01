@@ -73,7 +73,10 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
     try:
         # 1. Update user profile with email and name
         recipient_name = address_spec.get("name", "MIGHTY KUBE GORILLA")
-        profile_response = terminal_client.profile.update(name=recipient_name, email=email)
+        profile_response = terminal_client.profile.update(
+            name=recipient_name,
+            email=email  # Pass email as a keyword argument
+        )
         logger.info(f"UPDATE PROFILE! {recipient_name} FAMOUS NOW!")
 
         # 2. Create shipping address - remove state field if present
