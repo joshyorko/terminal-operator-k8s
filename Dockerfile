@@ -8,11 +8,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# COPY OPERATOR CODE
-COPY operator/ ./operator/
+# COPY terminal_operator CODE
+COPY terminal_operator/ ./terminal_operator/
 
 # EXPOSE PORT FOR HEALTH CHECKS
 EXPOSE 8080
 
-# RUN OPERATOR WITH MIGHTY ROAR
-CMD ["kopf", "run", "/app/operator/main.py", "--verbose", "--standalone", "--liveness=http://0.0.0.0:8080/healthz"]
+# RUN terminal_operator WITH MIGHTY ROAR
+CMD ["kopf", "run", "/app/terminal_operator/main.py", "--verbose", "--standalone", "--liveness=http://0.0.0.0:8080/healthz"]

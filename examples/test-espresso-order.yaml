@@ -1,10 +1,10 @@
 apiVersion: coffee.terminal.sh/v1alpha1
 kind: CoffeeOrder
 metadata:
-  name: test-espresso-order
+  name: test-flow-order
   namespace: default
 spec:
-  productVariantId: "var_esp_dbl"  # USE EXAMPLE PRODUCT ID - REPLACE WITH REAL ONE!
+  productVariantId: "var_01JNH7GTF9FBA62Y0RT0WMK3BT"  # Flow coffee - 12oz light roast from Sidama, Ethiopia
   quantity: 1
   address:
     name: "CODE GORILLA"
