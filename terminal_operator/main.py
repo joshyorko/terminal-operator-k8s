@@ -37,6 +37,7 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
     quantity = spec.get("quantity", 1)
     address_spec = spec.get("address", {})
     card_token = spec.get("cardToken")
+    email = spec.get("email")
 
     # Validate required fields
     if not product_variant_id:
@@ -57,6 +58,12 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
         patch.status["phase"] = "Failed"
         patch.status["message"] = msg
         raise kopf.PermanentError(msg)
+    if not email:
+        msg = "NEED EMAIL FOR ORDER! NO email IN SPEC!"
+        logger.error(msg)
+        patch.status["phase"] = "Failed"
+        patch.status["message"] = msg
+        raise kopf.PermanentError(msg)
 
     # Update initial status
     patch.status["phase"] = "Processing"
@@ -64,38 +71,53 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
     patch.status["observedGeneration"] = generation
 
     try:
-        # Extract email and name from spec
-        email = spec.get("email")
-        name = spec.get("address", {}).get("name", "MIGHTY KUBE GORILLA")
-        
-        if not email:
-            msg = "NEED EMAIL FOR ORDER! NO email IN SPEC!"
-            logger.error(msg)
-            patch.status["phase"] = "Failed"
-            patch.status["message"] = msg
-            raise kopf.PermanentError(msg)
-            
-        # Update user profile with email and name using keyword arguments
-        terminal_client.profile.update(name=name, email=email)
-        logger.info(f"UPDATE PROFILE! {name} FAMOUS NOW!")
+        # 1. Update user profile with email and name
+        recipient_name = address_spec.get("name", "MIGHTY KUBE GORILLA")
+        profile_response = terminal_client.profile.update(name=recipient_name, email=email)
+        logger.info(f"UPDATE PROFILE! {recipient_name} FAMOUS NOW!")
 
-        # Create shipping address using provided spec
-        address_response = terminal_client.address.create(**address_spec)
-        address_id = address_response.data.id
+        # 2. Create shipping address - remove state field if present
+        address_payload = address_spec.copy()
+        address_payload.pop("state", None)
+        address_response = terminal_client.address.create(**address_payload)
+        
+        # Handle different response types for address_id
+        if isinstance(address_response.data, str):
+            address_id = address_response.data
+        else:
+            address_id = address_response.data.id
         logger.info(f"CREATE ADDRESS WITH ID: {address_id}! KNOW WHERE DELIVER!")
 
-        # Create card using the provided card token
-        card_response = terminal_client.card.create(token=card_token)
-        card_id = card_response.data.id
-        logger.info(f"CREATE CARD WITH ID: {card_id}! PAY FOR COFFEE!")
+        # 3. Create card using the provided card token
+        try:
+            card_response = terminal_client.card.create(token=card_token)
+            card_id = card_response.data.id
+            logger.info(f"CREATE CARD WITH ID: {card_id}! PAY FOR COFFEE!")
+        except Exception as e:
+            # If the card already exists, list existing cards and use the first one
+            if "already_exists" in str(e):
+                logger.info("CARD ALREADY EXISTS! CHECK WALLET...")
+                cards_response = terminal_client.card.list()
+                card_list = list(cards_response.data) if hasattr(cards_response.data, '__iter__') else []
+                if card_list:
+                    card_id = card_list[0].id
+                    logger.info(f"FOUND EXISTING CARD: {card_id}! REUSE FOR COFFEE!")
+                else:
+                    raise Exception("NO EXISTING CARD FOUND DESPITE 'already_exists' ERROR!")
+            else:
+                raise
 
-        # Direct order creation without cart
+        # 4. Create order directly (without cart)
         order_response = terminal_client.order.create(
             address_id=address_id,
             card_id=card_id,
             variants={product_variant_id: quantity}
         )
-        order_id = order_response.data.id
+        # Handle different response types for order_id
+        if isinstance(order_response.data, str):
+            order_id = order_response.data
+        else:
+            order_id = order_response.data.id
         logger.info(f"ORDER COFFEE! ORDER ID: {order_id}! SO HAPPY!")
 
         patch.status["phase"] = "Ordered"
