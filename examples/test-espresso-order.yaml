@@ -2,10 +2,11 @@ apiVersion: coffee.terminal.sh/v1alpha1
 kind: CoffeeOrder
 metadata:
   name: test-flow-order
-  namespace: default
+  namespace: terminal-shop-dev
 spec:
   productVariantId: "var_01JNH7GTF9FBA62Y0RT0WMK3BT"  # Flow coffee - 12oz light roast from Sidama, Ethiopia
   quantity: 1
+  email: "joshua.yorko@gmail.com"  # Adding required email field
   address:
     name: "CODE GORILLA"
     street1: "42 Binary Jungle"
