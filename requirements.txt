@@ -2,3 +2,5 @@ kopf
 terminal-shop
 python-dotenv
 kubernetes
+click
+rich
