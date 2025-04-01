@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import datetime
 from typing import Optional
 
 import kopf
@@ -389,14 +390,22 @@ def handle_coffee_order_creation(spec, status, meta, patch, logger, **kwargs):
 # ---- Periodic Status Check using Timer ----
 @kopf.timer("coffee.terminal.sh", "v1alpha1", "coffeeorders", interval=300.0, initial_delay=60)
 async def check_order_status(spec, status, meta, patch, logger, **kwargs):
-    """Periodically checks the status of placed orders via the Terminal API."""
+    """Periodically checks the status of placed orders via the Terminal API.
+    
+    Important Notes:
+    - The Terminal API does not provide a direct 'delivered' or 'status' field
+    - Shipping status is inferred from the presence of tracking information
+    - 'Shipped' is considered the final observable state from the API
+    - Actual delivery confirmation would require external carrier tracking integration
+    """
     resource_name = meta.get("name")
     order_id = status.get("orderId")
     current_phase = status.get("phase")
 
-    # Only check if we have an order ID and the order isn't already in a final state
-    final_states = ["Failed", "Delivered", "Cancelled"]
+    # Include 'Shipped' as a final state since it's the last reliable state we can detect
+    final_states = ["Failed", "Delivered", "Cancelled", "Shipped"]
     if not order_id or current_phase in final_states:
+        logger.debug(f"[Timer: {resource_name}] Skipping check - OrderID exists: {bool(order_id)}, Current phase: {current_phase}")
         return
 
     logger.info(f"[Timer: {resource_name}] Checking status for Order ID: {order_id} (Current Phase: {current_phase})")
@@ -405,46 +414,42 @@ async def check_order_status(spec, status, meta, patch, logger, **kwargs):
         order_details_response = await asyncio.to_thread(terminal_client.order.get, order_id)
         order_data = order_details_response.data
 
-        # Add detailed debug logging
-        logger.info("=== Full Order Data Structure ===")
-        logger.info(f"Type: {type(order_data)}")
-        logger.info(f"Available attributes: {dir(order_data)}")
-        logger.info(f"Full data representation: {order_data}")
-        logger.info("=== End Order Data Structure ===")
+        # Log available fields for debugging
+        logger.debug(f"[Timer: {resource_name}] Order data fields available: {dir(order_data)}")
 
-        # Try to find status in different possible locations
-        api_status = None
-        possible_status_fields = ['status', 'state', 'order_status', 'tracking_status']
+        # --- Check Tracking Info ---
+        tracking_info = getattr(order_data, 'tracking', None)
+        if tracking_info:
+            logger.debug(f"[Timer: {resource_name}] Tracking info fields: {dir(tracking_info)}")
         
-        for field in possible_status_fields:
-            value = getattr(order_data, field, None)
-            if value:
-                logger.info(f"Found status in field '{field}': {value}")
-                api_status = value
-                break
+        tracking_number = getattr(tracking_info, 'number', None) if tracking_info else None
+        tracking_service = getattr(tracking_info, 'service', None) if tracking_info else None
+        tracking_url = getattr(tracking_info, 'url', None) if tracking_info else None
 
-        if not api_status:
-            logger.warning(f"[Timer: {resource_name}] API response for order {order_id} missing status field. Available fields: {dir(order_data)}")
-            return
+        logger.debug(f"[Timer: {resource_name}] Tracking details: number={tracking_number}, service={tracking_service}")
 
-        logger.info(f"[Timer: {resource_name}] Fetched API status for {order_id}: '{api_status}'")
+        if tracking_number and current_phase != "Shipped":
+            # When tracking info appears, we can reliably say the order has shipped
+            logger.info(f"[Timer: {resource_name}] Tracking number found ({tracking_number} via {tracking_service}). Updating phase to Shipped.")
+            patch.status['phase'] = "Shipped"
+            patch.status['message'] = f"Order shipped via {tracking_service}. Tracking: {tracking_number}"
+            # Update tracking fields in status
+            patch.status['trackingNumber'] = tracking_number
+            patch.status['trackingUrl'] = tracking_url
+            patch.status['trackingService'] = tracking_service
+            patch.status['lastStatusCheck'] = datetime.datetime.utcnow().isoformat() + "Z"
 
-        # Map API status to our CRD phase
-        new_phase = current_phase # Default to no change
-        if api_status.lower() == "shipped":
-            new_phase = "Shipped"
-        elif api_status.lower() == "delivered":
-            new_phase = "Delivered"
-        elif api_status.lower() == "cancelled":
-            new_phase = "Cancelled"
+        elif not tracking_number and current_phase == "Ordered":
+            # No tracking yet, order is still being processed
+            logger.info(f"[Timer: {resource_name}] No tracking number found. Order remains in 'Ordered' state.")
+            patch.status['message'] = f"Order placed, awaiting shipment. Last check: {datetime.datetime.utcnow().isoformat()}Z"
+            patch.status['lastStatusCheck'] = datetime.datetime.utcnow().isoformat() + "Z"
 
-        if new_phase != current_phase:
-            logger.info(f"[Timer: {resource_name}] Updating phase from '{current_phase}' to '{new_phase}' based on API.")
-            patch.status['phase'] = new_phase
-            patch.status['message'] = f"Status updated via API: {api_status}"
         else:
-            logger.info(f"[Timer: {resource_name}] API status '{api_status}' does not require phase change from '{current_phase}'.")
-            patch.status['message'] = f"Last checked status: {api_status}"
+            # Either already Shipped or in another state
+            logger.info(f"[Timer: {resource_name}] No status change needed. Current phase: {current_phase}, Has tracking: {bool(tracking_number)}")
+            patch.status['message'] = f"Order {current_phase}. Last check: {datetime.datetime.utcnow().isoformat()}Z"
+            patch.status['lastStatusCheck'] = datetime.datetime.utcnow().isoformat() + "Z"
 
     except APIStatusError as e:
         if e.status_code == 404:
@@ -453,8 +458,10 @@ async def check_order_status(spec, status, meta, patch, logger, **kwargs):
             patch.status['message'] = f"Order ID {order_id} not found in API (404)."
         else:
             logger.error(f"[Timer: {resource_name}] API error checking status for {order_id}: {e}")
+            patch.status['message'] = f"API error during status check: {e.status_code}" # Don't mark as failed for transient API errors
     except Exception as e:
         logger.error(f"[Timer: {resource_name}] Error checking status for {order_id}: {e}", exc_info=True)
+        patch.status['message'] = f"Error during status check: {str(e)}"
 
 # ---- Deletion Handler ----
 @kopf.on.delete("coffee.terminal.sh", "v1alpha1", "coffeeorders")

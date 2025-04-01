@@ -88,11 +88,11 @@ spec:
                       default: "morning"
             status:
               type: object
-              description: "Current status of the coffee order process."
+              description: "Current status of the coffee order process. Note: The 'Delivered' state requires external carrier tracking and is not automatically set by this operator."
               properties:
                 phase:
                   type: string
-                  description: "Current state of the order. Possible values:\n- Pending: Initial state\n- Processing: Order is being created\n- Ordered: Order successfully placed\n- Shipped: Order has been shipped\n- Delivered: Order has been delivered\n- Cancelled: Order was cancelled\n- Failed: Order failed to process"
+                  description: "Current state of the order. Status transitions:\n- Pending: Initial state when order is being validated\n- Processing: Dependencies are being checked and order is being created\n- Ordered: Order successfully placed with Terminal API\n- Shipped: Tracking number received, order has been shipped\n- Failed: Order failed to process\n- Cancelled: Order was cancelled\n- Delivered: (Note: This state requires external carrier tracking and is not set automatically)"
                   enum:
                     - Pending
                     - Processing
@@ -107,6 +107,15 @@ spec:
                 orderId:
                   type: string
                   description: "The Terminal API order ID once created."
+                trackingNumber:
+                  type: string
+                  description: "Carrier tracking number when available."
+                trackingUrl:
+                  type: string
+                  description: "URL to track the shipment directly with carrier when available."
+                trackingService:
+                  type: string
+                  description: "Shipping carrier service (e.g., USPS, FedEx) when available."
                 profileReadyStatus:
                   type: boolean
                   description: "Indicates if the referenced profile is ready (true) or not (false)."
