@@ -405,9 +405,26 @@ async def check_order_status(spec, status, meta, patch, logger, **kwargs):
         order_details_response = await asyncio.to_thread(terminal_client.order.get, order_id)
         order_data = order_details_response.data
 
-        api_status = getattr(order_data, 'status', None)
+        # Add detailed debug logging
+        logger.info("=== Full Order Data Structure ===")
+        logger.info(f"Type: {type(order_data)}")
+        logger.info(f"Available attributes: {dir(order_data)}")
+        logger.info(f"Full data representation: {order_data}")
+        logger.info("=== End Order Data Structure ===")
+
+        # Try to find status in different possible locations
+        api_status = None
+        possible_status_fields = ['status', 'state', 'order_status', 'tracking_status']
+        
+        for field in possible_status_fields:
+            value = getattr(order_data, field, None)
+            if value:
+                logger.info(f"Found status in field '{field}': {value}")
+                api_status = value
+                break
+
         if not api_status:
-            logger.warning(f"[Timer: {resource_name}] API response for order {order_id} missing 'status' field: {order_data}")
+            logger.warning(f"[Timer: {resource_name}] API response for order {order_id} missing status field. Available fields: {dir(order_data)}")
             return
 
         logger.info(f"[Timer: {resource_name}] Fetched API status for {order_id}: '{api_status}'")
