@@ -64,8 +64,17 @@ def handle_coffee_order(spec, status, meta, patch, logger, **kwargs):
     patch.status["observedGeneration"] = generation
 
     try:
-        # Update user profile (for demonstration; adjust parameters as needed)
-        terminal_client.profile.update(name="MIGHTY KUBE GORILLA")
+        # Extract email from spec
+        email = spec.get("email")
+        if not email:
+            msg = "NEED EMAIL FOR ORDER! NO email IN SPEC!"
+            logger.error(msg)
+            patch.status["phase"] = "Failed"
+            patch.status["message"] = msg
+            raise kopf.PermanentError(msg)
+
+        # Update user profile with email
+        terminal_client.profile.update(name="MIGHTY KUBE GORILLA", email=email)
         logger.info("UPDATE PROFILE! FAMOUS NOW!")
 
         # Create shipping address using provided spec
