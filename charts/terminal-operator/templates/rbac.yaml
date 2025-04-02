@@ -1,54 +1,24 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "terminal-operator.fullname" . }}
+  name: {{ include "terminal-operator.fullname" . }}-role
 rules:
-- apiGroups: [""]
-  resources: ["namespaces"]
-  verbs: ["list", "watch"]
-- apiGroups: ["apiextensions.k8s.io"]
-  resources: ["customresourcedefinitions"]
-  verbs: ["list", "watch", "get"]
 - apiGroups: ["coffee.terminal.sh"]
-  resources: ["coffeeorders", "coffeeprofiles", "coffeeaddresses", "coffeecards"]
-  verbs: ["list", "watch", "get", "patch"]
-- apiGroups: ["coffee.terminal.sh"]
-  resources: ["coffeeorders/status", "coffeeprofiles/status", "coffeeaddresses/status", "coffeecards/status"]
-  verbs: ["patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "terminal-operator.fullname" . }}
-  namespace: {{ .Release.Namespace }}
-rules:
+  resources: ["coffeeprofiles", "coffeeaddresses", "coffeecards", "coffeeorders", "coffeesubscriptions", "coffeecarts", "terminaltokens", "coffeeapps"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch", "update"]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "terminal-operator.fullname" . }}
+  name: {{ include "terminal-operator.fullname" . }}-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: {{ include "terminal-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "terminal-operator.fullname" . }}
-subjects:
-- kind: ServiceAccount
-  name: {{ include "terminal-operator.serviceAccountName" . }}
-  namespace: {{ .Release.Namespace }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ include "terminal-operator.fullname" . }}
-  namespace: {{ .Release.Namespace }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "terminal-operator.fullname" . }}
-subjects:
-- kind: ServiceAccount
-  name: {{ include "terminal-operator.serviceAccountName" . }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "terminal-operator.fullname" . }}-role
