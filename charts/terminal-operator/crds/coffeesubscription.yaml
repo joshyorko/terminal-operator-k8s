@@ -1,0 +1,154 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: coffeesubscriptions.coffee.terminal.sh
+spec:
+  group: coffee.terminal.sh
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: "Subscription specification for recurring coffee orders."
+              required:
+                - productVariantId
+                - quantity
+                - profileRef
+                - addressRef
+                - cardRef
+                - schedule
+              properties:
+                productVariantId:
+                  type: string
+                  description: "The specific product variant ID to subscribe to."
+                quantity:
+                  type: integer
+                  description: "Quantity of items per delivery."
+                  minimum: 1
+                  default: 1
+                profileRef:
+                  type: object
+                  description: "Reference to a CoffeeProfile resource."
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeProfile resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeProfile resource."
+                addressRef:
+                  type: object
+                  description: "Reference to a CoffeeAddress resource."
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeAddress resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeAddress resource."
+                cardRef:
+                  type: object
+                  description: "Reference to a CoffeeCard resource."
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeCard resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeCard resource."
+                schedule:
+                  type: object
+                  description: "Schedule configuration for the subscription."
+                  required:
+                    - type
+                    - interval
+                  properties:
+                    type:
+                      type: string
+                      description: "Type of schedule (weekly, monthly, etc)."
+                      enum:
+                        - weekly
+                        - monthly
+                    interval:
+                      type: integer
+                      description: "Interval between deliveries (e.g., every 2 weeks)."
+                      minimum: 1
+            status:
+              type: object
+              description: "Current status of the coffee subscription."
+              properties:
+                phase:
+                  type: string
+                  description: "Current state of the subscription."
+                  enum:
+                    - Pending
+                    - Active
+                    - Cancelled
+                    - Failed
+                subscriptionId:
+                  type: string
+                  description: "The Terminal API subscription ID once created."
+                nextDelivery:
+                  type: string
+                  format: date-time
+                  description: "Next scheduled delivery date."
+                message:
+                  type: string
+                  description: "Detailed status message or error info."
+                observedGeneration:
+                  type: integer
+                  description: "The most recent generation observed by the controller."
+                profileReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced profile is ready."
+                addressReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced address is ready."
+                cardReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced card is ready."
+                lastStatusCheck:
+                  type: string
+                  format: date-time
+                  description: "Timestamp of the last status check with the Terminal API."
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          description: Current phase of the subscription
+          jsonPath: .status.phase
+        - name: SubscriptionID
+          type: string
+          description: Terminal API Subscription ID
+          jsonPath: .status.subscriptionId
+        - name: Next Delivery
+          type: string
+          description: Next scheduled delivery
+          jsonPath: .status.nextDelivery
+        - name: Message
+          type: string
+          description: Status message
+          jsonPath: .status.message
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+  scope: Namespaced
+  names:
+    plural: coffeesubscriptions
+    singular: coffeesubscription
+    kind: CoffeeSubscription
+    shortNames:
+      - csub
+      - cs

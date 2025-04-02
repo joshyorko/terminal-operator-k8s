@@ -1,0 +1,16 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeCart
+metadata:
+  name: test-cart
+  namespace: terminal-shop-dev
+spec:
+  items:
+    - productVariantId: var_01J1JFDMNBXB5GJCQF6C3AEBCQ
+      quantity: 1
+    - productVariantId: var_01J1JFE53306NT180RC4HGPWH8
+      quantity: 2
+  addressRef:
+    name: default-address
+  cardRef:
+    name: default-card
+  convertToOrder: true
