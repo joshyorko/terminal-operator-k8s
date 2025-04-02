@@ -3,6 +3,7 @@ import logging
 import asyncio
 import datetime
 from typing import Optional
+import base64
 
 import kopf
 from dotenv import load_dotenv
@@ -211,6 +212,137 @@ def delete_card(spec, status, meta, logger, **kwargs):
     except Exception as e:
         logger.error(f"Failed to delete card {card_id}: {e}")
         # Don't raise an error here as the resource is being deleted anyway
+
+# --- Subscription Handler ---
+@kopf.on.create('coffee.terminal.sh', 'v1alpha1', 'coffeesubscriptions')
+@kopf.on.update('coffee.terminal.sh', 'v1alpha1', 'coffeesubscriptions')
+def handle_subscription(spec, status, meta, patch, logger, **kwargs):
+    """Handles CoffeeSubscription creation/updates."""
+    resource_name = meta['name']
+    generation = meta.get('generation')
+
+    # Idempotency: Don't reprocess if already active and generation matches
+    if status.get('subscriptionId') and \
+       status.get('phase') == 'Active' and \
+       status.get('observedGeneration') == generation:
+        logger.info(f"Subscription {resource_name} already active with ID {status['subscriptionId']} for this generation.")
+        return
+
+    # Set initial phase
+    if status.get('phase') != 'Active':
+        patch.status['phase'] = 'Pending'
+        patch.status['message'] = 'Validating subscription dependencies'
+        patch.status['observedGeneration'] = generation
+
+    try:
+        # Get and validate profile
+        profile = get_referenced_resource('coffeeprofiles', spec['profileRef'], meta.get('namespace'))
+        if not profile or profile['status'].get('phase') != 'Synced':
+            patch.status['profileReadyStatus'] = False
+            raise kopf.TemporaryError("Referenced profile not ready", delay=10)
+        patch.status['profileReadyStatus'] = True
+
+        # Get and validate address
+        address = get_referenced_resource('coffeeaddresses', spec['addressRef'], meta.get('namespace'))
+        if not address or not address['status'].get('addressId') or address['status'].get('phase') != 'Verified':
+            patch.status['addressReadyStatus'] = False
+            raise kopf.TemporaryError("Referenced address not ready", delay=10)
+        patch.status['addressReadyStatus'] = True
+        address_id = address['status']['addressId']
+
+        # Get and validate card
+        card = get_referenced_resource('coffeecards', spec['cardRef'], meta.get('namespace'))
+        if not card or not card['status'].get('cardId') or card['status'].get('phase') != 'Registered':
+            patch.status['cardReadyStatus'] = False
+            raise kopf.TemporaryError("Referenced card not ready", delay=10)
+        patch.status['cardReadyStatus'] = True
+        card_id = card['status']['cardId']
+
+        logger.info(f"Creating/updating subscription for {resource_name}...")
+        
+        # If we already have a subscription ID, check if it exists and is active
+        if status.get('subscriptionId'):
+            try:
+                sub_response = terminal_client.subscription.get_by_id(status['subscriptionId'])
+                if sub_response.data:
+                    logger.info(f"Subscription exists, updating if needed...")
+                    # TODO: Implement subscription updates when API supports it
+                    return
+            except APIStatusError as e:
+                if e.status_code == 404:
+                    logger.info("Subscription no longer exists, creating new one")
+                else:
+                    raise
+
+        # Create new subscription
+        sub_data = {
+            'productVariantId': spec['productVariantId'],
+            'quantity': spec.get('quantity', 1),
+            'addressId': address_id,
+            'cardId': card_id,
+            'schedule': {
+                'type': spec['schedule']['type'],
+                'interval': spec['schedule']['interval']
+            }
+        }
+
+        sub_response = terminal_client.subscription.create(**sub_data)
+        sub_id = get_id_from_response(sub_response.data)
+        
+        if not sub_id:
+            patch.status['phase'] = 'Failed'
+            patch.status['message'] = 'Failed to get subscription ID from API response'
+            logger.error(f"Subscription {resource_name} creation failed: No subscription ID in response")
+            raise kopf.PermanentError("No subscription ID in successful API response")
+
+        # Update status with subscription details
+        patch.status['subscriptionId'] = sub_id
+        patch.status['phase'] = 'Active'
+        patch.status['message'] = 'Subscription activated successfully'
+        if 'next' in sub_response.data:
+            patch.status['nextDelivery'] = sub_response.data['next']
+        patch.status['lastStatusCheck'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        
+        logger.info(f"Subscription {resource_name} created with ID {sub_id}")
+
+    except APIStatusError as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"API error creating subscription: {e.status_code} - {e.body or e.reason}"
+        logger.error(f"Subscription {resource_name} API creation failed: {e}")
+        if 400 <= e.status_code < 500:
+            raise kopf.PermanentError(f"Subscription API creation failed permanently: {e}")
+        else:
+            raise kopf.TemporaryError(f"Subscription API creation failed: {e}", delay=60)
+
+    except Exception as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"Unexpected error creating subscription: {str(e)}"
+        logger.error(f"Subscription {resource_name} creation failed unexpectedly: {e}", exc_info=True)
+        raise kopf.TemporaryError(f"Subscription creation failed unexpectedly: {e}", delay=60)
+
+@kopf.on.delete('coffee.terminal.sh', 'v1alpha1', 'coffeesubscriptions')
+def delete_subscription(spec, status, meta, logger, **kwargs):
+    """Handles CoffeeSubscription deletion by cancelling the subscription."""
+    resource_name = meta['name']
+    subscription_id = status.get('subscriptionId')
+
+    if not subscription_id:
+        logger.info(f"No subscription ID found for {resource_name}, nothing to cancel")
+        return
+
+    try:
+        logger.info(f"Cancelling subscription {subscription_id} for {resource_name}...")
+        terminal_client.subscription.delete(subscription_id)
+        logger.info(f"Subscription {subscription_id} cancelled successfully")
+    except APIStatusError as e:
+        if e.status_code == 404:
+            logger.info(f"Subscription {subscription_id} already cancelled or not found")
+        else:
+            logger.error(f"Error cancelling subscription {subscription_id}: {e}")
+            raise kopf.TemporaryError(f"Failed to cancel subscription: {e}", delay=10)
+    except Exception as e:
+        logger.error(f"Unexpected error cancelling subscription {subscription_id}: {e}")
+        raise kopf.TemporaryError(f"Failed to cancel subscription: {e}", delay=10)
 
 # --- Operator Handlers ---
 
@@ -477,3 +609,344 @@ def handle_coffee_order_deletion(spec, status, meta, logger, **kwargs):
         logger.warning(f"[Delete: {resource_name}] The Terminal API does not provide an endpoint to cancel existing orders.")
     else:
         logger.info(f"[Delete: {resource_name}] No associated Terminal order ID found in status. Nothing to do in API.")
+
+@kopf.on.create('coffee.terminal.sh', 'v1alpha1', 'coffeecarts')
+@kopf.on.update('coffee.terminal.sh', 'v1alpha1', 'coffeecarts')
+def handle_cart(spec, status, meta, patch, logger, **kwargs):
+    """Handles CoffeeCart creation/updates."""
+    resource_name = meta['name']
+    generation = meta.get('generation')
+
+    # Initialize cart if needed
+    if status.get('phase') in [None, 'Empty']:
+        logger.info(f"Initializing cart for {resource_name}...")
+        try:
+            # Clear any existing cart first
+            terminal_client.cart.delete()
+            patch.status['phase'] = 'Empty'
+            patch.status['message'] = 'Cart initialized'
+            patch.status['observedGeneration'] = generation
+        except Exception as e:
+            logger.error(f"Failed to initialize cart: {e}")
+            patch.status['phase'] = 'Failed'
+            patch.status['message'] = f"Cart initialization failed: {str(e)}"
+            raise kopf.TemporaryError(f"Cart initialization failed: {e}", delay=30)
+
+    try:
+        # Add/update items in cart
+        if spec.get('items'):
+            logger.info(f"Adding/updating items in cart for {resource_name}...")
+            for item in spec['items']:
+                terminal_client.cart.add_item(
+                    product_variant_id=item['productVariantId'],
+                    quantity=item.get('quantity', 1)
+                )
+            patch.status['phase'] = 'ItemsAdded'
+            patch.status['message'] = 'Items added to cart'
+            
+            # Get updated cart details
+            cart_response = terminal_client.cart.get()
+            if cart_response.data:
+                patch.status['subtotal'] = getattr(cart_response.data, 'subtotal', 0)
+                patch.status['shipping'] = getattr(cart_response.data.amount, 'shipping', 0) if hasattr(cart_response.data, 'amount') else 0
+                patch.status['total'] = patch.status['subtotal'] + patch.status['shipping']
+
+        # Set shipping address if provided
+        if spec.get('addressRef'):
+            address = get_referenced_resource('coffeeaddresses', spec['addressRef'], meta.get('namespace'))
+            if not address or not address['status'].get('addressId') or address['status'].get('phase') != 'Verified':
+                patch.status['addressReadyStatus'] = False
+                patch.status['message'] = 'Waiting for address to be ready'
+                raise kopf.TemporaryError("Referenced address not ready", delay=10)
+            
+            patch.status['addressReadyStatus'] = True
+            address_id = address['status']['addressId']
+            terminal_client.cart.set_address(address_id=address_id)
+            if patch.status['phase'] == 'ItemsAdded':
+                patch.status['phase'] = 'AddressSet'
+
+        # Set payment card if provided
+        if spec.get('cardRef'):
+            card = get_referenced_resource('coffeecards', spec['cardRef'], meta.get('namespace'))
+            if not card or not card['status'].get('cardId') or card['status'].get('phase') != 'Registered':
+                patch.status['cardReadyStatus'] = False
+                patch.status['message'] = 'Waiting for card to be ready'
+                raise kopf.TemporaryError("Referenced card not ready", delay=10)
+            
+            patch.status['cardReadyStatus'] = True
+            card_id = card['status']['cardId']
+            terminal_client.cart.set_card(card_id=card_id)
+            if patch.status['phase'] in ['ItemsAdded', 'AddressSet']:
+                patch.status['phase'] = 'CardSet'
+
+        # Check if cart is ready to be converted
+        if spec.get('convertToOrder') and \
+           patch.status.get('addressReadyStatus') and \
+           patch.status.get('cardReadyStatus') and \
+           patch.status['phase'] in ['ItemsAdded', 'AddressSet', 'CardSet']:
+            
+            patch.status['phase'] = 'Converting'
+            patch.status['message'] = 'Converting cart to order...'
+            
+            # Convert cart to order
+            order_response = terminal_client.cart.convert()
+            order_id = get_id_from_response(order_response.data)
+            
+            if not order_id:
+                patch.status['phase'] = 'Failed'
+                patch.status['message'] = 'Failed to get order ID after cart conversion'
+                raise kopf.PermanentError("No order ID in cart conversion response")
+            
+            patch.status['orderId'] = order_id
+            patch.status['phase'] = 'Converted'
+            patch.status['message'] = f'Cart converted to order {order_id}'
+            logger.info(f"Cart {resource_name} converted to order {order_id}")
+
+    except APIStatusError as e:
+        patch.status['message'] = f"API error managing cart: {e.status_code} - {e.body or e.reason}"
+        logger.error(f"Cart {resource_name} API operation failed: {e}")
+        if 400 <= e.status_code < 500:
+            patch.status['phase'] = 'Failed'
+            raise kopf.PermanentError(f"Cart operation failed permanently: {e}")
+        else:
+            raise kopf.TemporaryError(f"Cart operation failed: {e}", delay=60)
+
+    except Exception as e:
+        logger.error(f"Cart {resource_name} operation failed unexpectedly: {e}", exc_info=True)
+        patch.status['message'] = f"Unexpected error managing cart: {str(e)}"
+        if not isinstance(e, kopf.TemporaryError):
+            patch.status['phase'] = 'Failed'
+        raise
+
+@kopf.on.delete('coffee.terminal.sh', 'v1alpha1', 'coffeecarts')
+def delete_cart(spec, status, meta, logger, **kwargs):
+    """Handles CoffeeCart deletion by clearing the cart."""
+    resource_name = meta['name']
+
+    try:
+        logger.info(f"Clearing cart for {resource_name}...")
+        terminal_client.cart.delete()
+        logger.info(f"Cart cleared successfully")
+    except Exception as e:
+        logger.error(f"Failed to clear cart: {e}")
+        # Don't raise since resource is being deleted anyway
+
+@kopf.on.create('coffee.terminal.sh', 'v1alpha1', 'terminaltokens')
+@kopf.on.update('coffee.terminal.sh', 'v1alpha1', 'terminaltokens')
+def handle_token(spec, status, meta, patch, logger, **kwargs):
+    """Handles TerminalToken creation/updates."""
+    resource_name = meta['name']
+    generation = meta.get('generation')
+
+    # Idempotency: Don't reprocess if already active and generation matches
+    if status.get('tokenId') and \
+       status.get('phase') == 'Active' and \
+       status.get('observedGeneration') == generation:
+        logger.info(f"Token {resource_name} already active with ID {status['tokenId']} for this generation.")
+        return
+
+    # Set initial phase
+    if status.get('phase') != 'Active':
+        patch.status['phase'] = 'Pending'
+        patch.status['message'] = 'Creating Terminal API token'
+        patch.status['observedGeneration'] = generation
+
+    try:
+        logger.info(f"Creating token for {resource_name}...")
+        token_response = terminal_client.token.create()
+        token_id = get_id_from_response(token_response.data)
+
+        if not token_id:
+            patch.status['phase'] = 'Failed'
+            patch.status['message'] = 'Failed to get token ID from API response'
+            logger.error(f"Token {resource_name} creation failed: No token ID in response")
+            raise kopf.PermanentError("No token ID in successful API response")
+
+        # Update status with token details
+        patch.status['tokenId'] = token_id
+        patch.status['phase'] = 'Active'
+        patch.status['message'] = 'Token created successfully'
+        patch.status['created'] = getattr(token_response.data, 'created', datetime.datetime.now(datetime.timezone.utc).isoformat())
+        patch.status['lastStatusCheck'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        
+        logger.info(f"Token {resource_name} created with ID {token_id}")
+
+    except APIStatusError as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"API error creating token: {e.status_code} - {e.body or e.reason}"
+        logger.error(f"Token {resource_name} API creation failed: {e}")
+        if 400 <= e.status_code < 500:
+            raise kopf.PermanentError(f"Token API creation failed permanently: {e}")
+        else:
+            raise kopf.TemporaryError(f"Token API creation failed: {e}", delay=60)
+
+    except Exception as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"Unexpected error creating token: {str(e)}"
+        logger.error(f"Token {resource_name} creation failed unexpectedly: {e}", exc_info=True)
+        raise kopf.TemporaryError(f"Token creation failed unexpectedly: {e}", delay=60)
+
+@kopf.on.delete('coffee.terminal.sh', 'v1alpha1', 'terminaltokens')
+def delete_token(spec, status, meta, logger, **kwargs):
+    """Handles TerminalToken deletion."""
+    resource_name = meta['name']
+    token_id = status.get('tokenId')
+
+    if not token_id:
+        logger.info(f"No token ID found for {resource_name}, nothing to delete")
+        return
+
+    try:
+        logger.info(f"Deleting token {token_id} for {resource_name}...")
+        terminal_client.token.delete(token_id)
+        logger.info(f"Token {token_id} deleted successfully")
+    except APIStatusError as e:
+        if e.status_code == 404:
+            logger.info(f"Token {token_id} already deleted or not found")
+        else:
+            logger.error(f"Error deleting token {token_id}: {e}")
+            raise kopf.TemporaryError(f"Failed to delete token: {e}", delay=10)
+    except Exception as e:
+        logger.error(f"Unexpected error deleting token {token_id}: {e}")
+        raise kopf.TemporaryError(f"Failed to delete token: {e}", delay=10)
+
+def create_or_update_app_secret(name: str, namespace: str, client_id: str, client_secret: str):
+    """Creates or updates a Kubernetes secret for app credentials."""
+    core_v1 = client.CoreV1Api()
+    secret_name = f"{name}-credentials"
+    
+    secret_data = {
+        "client_id": base64.b64encode(client_id.encode()).decode(),
+        "client_secret": base64.b64encode(client_secret.encode()).decode()
+    }
+    
+    secret = client.V1Secret(
+        metadata=client.V1ObjectMeta(name=secret_name, namespace=namespace),
+        type="Opaque",
+        data=secret_data
+    )
+    
+    try:
+        core_v1.create_namespaced_secret(namespace=namespace, body=secret)
+    except client.exceptions.ApiException as e:
+        if e.status == 409:  # Conflict, secret already exists
+            core_v1.replace_namespaced_secret(name=secret_name, namespace=namespace, body=secret)
+        else:
+            raise
+    
+    return {"name": secret_name, "namespace": namespace}
+
+@kopf.on.create('coffee.terminal.sh', 'v1alpha1', 'coffeeapps')
+@kopf.on.update('coffee.terminal.sh', 'v1alpha1', 'coffeeapps')
+def handle_app(spec, status, meta, patch, logger, **kwargs):
+    """Handles CoffeeApp creation/updates."""
+    resource_name = meta['name']
+    generation = meta.get('generation')
+    namespace = meta.get('namespace', 'default')
+
+    # Idempotency: Don't reprocess if already active and generation matches
+    if status.get('appId') and \
+       status.get('phase') == 'Active' and \
+       status.get('observedGeneration') == generation:
+        logger.info(f"App {resource_name} already active with ID {status['appId']} for this generation.")
+        return
+
+    # Set initial phase
+    if status.get('phase') != 'Active':
+        patch.status['phase'] = 'Pending'
+        patch.status['message'] = 'Creating Terminal API OAuth app'
+        patch.status['observedGeneration'] = generation
+
+    try:
+        logger.info(f"Creating/updating OAuth app {resource_name}...")
+        app_response = terminal_client.app.create(
+            name=spec['name'],
+            redirect_uri=spec['redirectUri']
+        )
+        app_id = get_id_from_response(app_response.data)
+        
+        if not app_id:
+            patch.status['phase'] = 'Failed'
+            patch.status['message'] = 'Failed to get app ID from API response'
+            logger.error(f"App {resource_name} creation failed: No app ID in response")
+            raise kopf.PermanentError("No app ID in successful API response")
+
+        # Store credentials in Kubernetes secret
+        client_id = app_id
+        client_secret = getattr(app_response.data, 'secret', None)
+        if not client_secret:
+            patch.status['phase'] = 'Failed'
+            patch.status['message'] = 'Failed to get app secret from API response'
+            logger.error(f"App {resource_name} creation failed: No client secret in response")
+            raise kopf.PermanentError("No client secret in successful API response")
+
+        # Create or update the secret
+        secret_ref = create_or_update_app_secret(
+            name=resource_name,
+            namespace=namespace,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+
+        # Update status with app details
+        patch.status['appId'] = app_id
+        patch.status['phase'] = 'Active'
+        patch.status['message'] = 'OAuth app created successfully'
+        patch.status['secretRef'] = secret_ref
+        patch.status['lastStatusCheck'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        
+        logger.info(f"OAuth app {resource_name} created with ID {app_id}")
+
+    except APIStatusError as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"API error creating OAuth app: {e.status_code} - {e.body or e.reason}"
+        logger.error(f"App {resource_name} API creation failed: {e}")
+        if 400 <= e.status_code < 500:
+            raise kopf.PermanentError(f"OAuth app API creation failed permanently: {e}")
+        else:
+            raise kopf.TemporaryError(f"OAuth app API creation failed: {e}", delay=60)
+
+    except Exception as e:
+        patch.status['phase'] = 'Failed'
+        patch.status['message'] = f"Unexpected error creating OAuth app: {str(e)}"
+        logger.error(f"App {resource_name} creation failed unexpectedly: {e}", exc_info=True)
+        raise kopf.TemporaryError(f"OAuth app creation failed unexpectedly: {e}", delay=60)
+
+@kopf.on.delete('coffee.terminal.sh', 'v1alpha1', 'coffeeapps')
+def delete_app(spec, status, meta, logger, **kwargs):
+    """Handles CoffeeApp deletion."""
+    resource_name = meta['name']
+    app_id = status.get('appId')
+    namespace = meta.get('namespace', 'default')
+
+    if not app_id:
+        logger.info(f"No app ID found for {resource_name}, nothing to delete")
+        return
+
+    try:
+        # Delete the app from Terminal API
+        logger.info(f"Deleting OAuth app {app_id} for {resource_name}...")
+        terminal_client.app.delete(app_id)
+        logger.info(f"OAuth app {app_id} deleted successfully")
+
+        # Clean up the associated secret
+        if status.get('secretRef'):
+            try:
+                core_v1 = client.CoreV1Api()
+                secret_name = status['secretRef']['name']
+                secret_namespace = status['secretRef'].get('namespace', namespace)
+                core_v1.delete_namespaced_secret(name=secret_name, namespace=secret_namespace)
+                logger.info(f"Deleted associated secret {secret_name} in namespace {secret_namespace}")
+            except client.exceptions.ApiException as e:
+                if e.status != 404:  # Ignore if secret is already gone
+                    logger.error(f"Failed to delete secret: {e}")
+
+    except APIStatusError as e:
+        if e.status_code == 404:
+            logger.info(f"OAuth app {app_id} already deleted or not found")
+        else:
+            logger.error(f"Error deleting OAuth app {app_id}: {e}")
+            raise kopf.TemporaryError(f"Failed to delete OAuth app: {e}", delay=10)
+    except Exception as e:
+        logger.error(f"Unexpected error deleting OAuth app {app_id}: {e}")
+        raise kopf.TemporaryError(f"Failed to delete OAuth app: {e}", delay=10)
