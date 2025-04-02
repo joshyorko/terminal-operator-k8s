@@ -648,7 +648,14 @@ def handle_cart(spec, status, meta, patch, logger, **kwargs):
             cart_response = terminal_client.cart.get()
             if cart_response.data:
                 patch.status['subtotal'] = getattr(cart_response.data, 'subtotal', 0)
-                patch.status['shipping'] = getattr(cart_response.data.amount, 'shipping', 0) if hasattr(cart_response.data, 'amount') else 0
+                if hasattr(cart_response.data, 'amount'):
+                    amount = cart_response.data.amount
+                    if isinstance(amount, dict):
+                        patch.status['shipping'] = amount.get('shipping', 0)
+                    else:
+                        patch.status['shipping'] = getattr(amount, 'shipping', 0)
+                else:
+                    patch.status['shipping'] = 0
                 patch.status['total'] = patch.status['subtotal'] + patch.status['shipping']
 
         # Set shipping address if provided
