@@ -1,5 +1,8 @@
 # Terminal Operator for Kubernetes
 
+![Terminal Avatar](https://avatars.githubusercontent.com/u/166243908?s=200&v=4)
+
+
 A Kubernetes operator that provides declarative management of Terminal shop resources via custom resource definitions (CRDs).
 
 ## Features
