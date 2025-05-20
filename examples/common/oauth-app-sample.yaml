@@ -1,0 +1,8 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeApp
+metadata:
+  name: test-oauth-app
+  namespace: terminal-shop-dev
+spec:
+  name: "Test OAuth App"
+  redirectUri: "https://example.com/oauth/callback"

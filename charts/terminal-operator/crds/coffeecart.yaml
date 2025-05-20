@@ -1,0 +1,129 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: coffeecarts.coffee.terminal.sh
+spec:
+  group: coffee.terminal.sh
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: "Shopping cart specification for coffee orders."
+              properties:
+                items:
+                  type: array
+                  description: "Items in the cart."
+                  items:
+                    type: object
+                    required:
+                      - productVariantId
+                      - quantity
+                    properties:
+                      productVariantId:
+                        type: string
+                        description: "ID of the product variant."
+                      quantity:
+                        type: integer
+                        description: "Quantity of items."
+                        minimum: 1
+                        default: 1
+                addressRef:
+                  type: object
+                  description: "Reference to a CoffeeAddress resource."
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeAddress resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeAddress resource."
+                cardRef:
+                  type: object
+                  description: "Reference to a CoffeeCard resource."
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the CoffeeCard resource."
+                    namespace:
+                      type: string
+                      description: "Namespace of the CoffeeCard resource."
+                convertToOrder:
+                  type: boolean
+                  description: "If true, the cart will be converted to an order once all items, address, and card are set."
+                  default: false
+            status:
+              type: object
+              description: "Current status of the shopping cart."
+              properties:
+                phase:
+                  type: string
+                  description: "Current state of the cart."
+                  enum:
+                    - Empty
+                    - ItemsAdded
+                    - AddressSet
+                    - CardSet
+                    - Ready
+                    - Converting
+                    - Converted
+                    - Failed
+                message:
+                  type: string
+                  description: "Detailed status message or error info."
+                observedGeneration:
+                  type: integer
+                  description: "The most recent generation observed by the controller."
+                subtotal:
+                  type: integer
+                  description: "Current cart subtotal in cents (USD)."
+                shipping:
+                  type: integer
+                  description: "Shipping cost in cents (USD)."
+                total:
+                  type: integer
+                  description: "Total cost including shipping in cents (USD)."
+                addressReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced address is ready."
+                cardReadyStatus:
+                  type: boolean
+                  description: "Indicates if the referenced card is ready."
+                orderId:
+                  type: string
+                  description: "If converted to order, the Terminal API order ID."
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          description: Current phase of the cart
+          jsonPath: .status.phase
+        - name: Items
+          type: integer
+          description: Number of items in cart
+          jsonPath: .spec.items[*].quantity
+        - name: Total
+          type: string
+          description: Total cost including shipping
+          jsonPath: .status.total
+        - name: Message
+          type: string
+          description: Status message
+          jsonPath: .status.message
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+  scope: Namespaced
+  names:
+    plural: coffeecarts
+    singular: coffeecart
+    kind: CoffeeCart
+    shortNames:
+      - ccart
+      - cc

@@ -1,0 +1,7 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: TerminalToken
+metadata:
+  name: test-token
+  namespace: terminal-shop-dev
+spec:
+  description: "Test API token for development"

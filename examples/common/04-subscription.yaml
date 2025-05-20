@@ -1,0 +1,17 @@
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeSubscription
+metadata:
+  name: weekly-flow
+  namespace: terminal-shop-dev
+spec:
+  productVariantId: var_01JNH7GTF9FBA62Y0RT0WMK3BT  # Flow coffee - 12oz light roast
+  quantity: 1
+  profileRef:
+    name: default-profile
+  addressRef:
+    name: default-address
+  cardRef:
+    name: default-card
+  schedule:
+    type: weekly
+    interval: 2  # Every 2 weeks
