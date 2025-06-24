@@ -11,6 +11,7 @@ A Kubernetes operator that provides declarative management of Terminal shop reso
 - Automatic dependency resolution between resources
 - Status tracking and error handling
 - Secure credential management
+- Fully asynchronous operator leveraging `AsyncTerminal`
 
 ## Custom Resources
 
@@ -78,6 +79,18 @@ A Kubernetes operator that provides declarative management of Terminal shop reso
    ```
 
 ## Usage Examples
+
+### Creating a Profile
+
+```yaml
+apiVersion: coffee.terminal.sh/v1alpha1
+kind: CoffeeProfile
+metadata:
+  name: my-profile
+spec:
+  email: user@example.com
+  name: Example User
+```
 
 ### Creating a Subscription
 
