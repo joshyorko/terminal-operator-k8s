@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/joshyorko/terminal-operator-k8s
+  repository: ghcr.io/joshyorko/terminal-operator-k8s:feat
   tag: 0.2.0
   pullPolicy: Always
 
@@ -9,7 +9,7 @@ env:
 
 # USE KUBE SECRET FOR TOKEN SECURITY!
 existingSecret: "terminal-api-secret"  # NAME OF SECRET WITH TOKEN
-secretTokenKey: "TERMINAL_BEARER_TOKEN"
+secretTokenKey: "test_e14c18e234e881616aea"
 
 resources: {}
 
